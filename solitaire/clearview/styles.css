@@ -365,6 +365,8 @@ a.brand:hover { opacity: 0.8; }
   font: 800 calc(var(--cw) * 0.4)/1 'Playfair Display', Georgia, serif;
   text-shadow: 0 1px 0 rgba(255, 255, 255, 0.8), 0 0 10px rgba(212, 175, 95, 0.45);
 }
+/* J and Q descend below the baseline in Playfair; push the suit down to match K's spacing */
+.court .cl.desc { margin-bottom: calc(var(--cw) * 0.08); }
 .court .cs { font-size: calc(var(--cw) * 0.18); line-height: 1; font-family: 'Segoe UI Symbol', 'Apple Symbols', serif; }
 
 .back {
