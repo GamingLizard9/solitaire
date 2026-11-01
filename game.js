@@ -455,7 +455,7 @@
     const big = cw * 0.3;
     const small = m ? Math.min(cw * 0.13, Math.max(0, (avail - cw - (k - 1) * big) / m)) : 0;
     state.waste.forEach((id, i) => {
-      const x = colX(1) + (i <= m ? i * small : m * small + (i - m) * big);
+      const x = Math.round(colX(1) + (i <= m ? i * small : m * small + (i - m) * big));
       out[id] = { x, y: top, z: 100 + i, down: false, key: 'w' };
     });
 
@@ -474,7 +474,7 @@
       let runStart = col.length - 1;
       while (runStart > 0 && fits(col[runStart], col[runStart - 1])) runStart--;
       col.forEach((id, i) => {
-        out[id] = { x: colX(c), y: L.tabY + i * off, z: 400 + i, down: false, key: 't' + c, locked: i < runStart };
+        out[id] = { x: colX(c), y: Math.round(L.tabY + i * off), z: 400 + i, down: false, key: 't' + c, locked: i < runStart };
       });
     });
     state.waste.forEach((id, i) => { out[id].locked = i < state.waste.length - 1; });
@@ -492,16 +492,43 @@
     }
   }
 
+  // Cards rest as flat 2D layers (3D layers can show seam lines in Chrome). A card that
+  // turns over is switched into 3D mode at its current side first, then flipped, and
+  // flattened again once the turn is done.
+  function prepareFlips(flips) {
+    if (!flips.length) return;
+    for (const { el } of flips) {
+      el.firstChild.style.transition = 'none';
+      el.classList.add('flip3d');
+    }
+    void board.offsetWidth;
+    for (const { el, down, delay } of flips) {
+      el.firstChild.style.transition = '';
+      el.classList.toggle('down', down);
+      clearTimeout(el._ft);
+      el._ft = setTimeout(() => el.classList.remove('flip3d'), 2000 + delay); // backstop for the transitionend below
+    }
+  }
+
+  board.addEventListener('transitionend', e => {
+    if (e.propertyName !== 'transform' || !e.target.classList.contains('inner')) return;
+    const el = e.target.parentElement;
+    clearTimeout(el._ft);
+    el.classList.remove('flip3d');
+  });
+
   function render({ instant = false, stagger = null, boost = null } = {}) {
     P = computePositions();
     if (instant) board.classList.add('no-anim');
+    const flips = [];
     for (const c of CARDS) {
       const el = els[c.id];
       const p = P[c.id];
       const delay = stagger ? (stagger[c.id] || 0) : 0;
       el.style.transitionDelay = el.firstChild.style.transitionDelay = delay ? delay + 'ms' : '';
-      el.style.transform = `translate3d(${p.x}px, ${p.y}px, 0)`;
-      el.classList.toggle('down', p.down);
+      el.style.transform = `translate(${p.x}px, ${p.y}px)`;
+      if (instant || el.classList.contains('down') === p.down) el.classList.toggle('down', p.down);
+      else flips.push({ el, down: p.down, delay });
       el.classList.toggle('locked', DIM_LOCKED && !!p.locked);
       const moved = el._key !== p.key || (boost && boost.has(c.id)) || delay;
       if (instant) {
@@ -513,6 +540,7 @@
       }
       el._key = p.key;
     }
+    prepareFlips(flips);
 
     slots.stock.classList.toggle('free-cell', freeActive());
     slots.badge.textContent = state.stock.length;
@@ -530,8 +558,10 @@
     for (const c of CARDS) {
       const el = els[c.id];
       el.style.transition = '';
-      el.style.transform = `translate3d(0px, ${L.top}px, 0)`;
+      el.style.transform = `translate(0px, ${L.top}px)`;
       el.classList.add('down');
+      el.classList.remove('flip3d');
+      clearTimeout(el._ft);
       clearTimeout(el._zt);
       el._zt = null;
       el.style.zIndex = 10 + c.id;
@@ -670,7 +700,7 @@
     drag.dx = dx;
     drag.dy = dy;
     drag.ids.forEach((id, k) => {
-      els[id].style.transform = `translate3d(${drag.base[k].x + dx}px, ${drag.base[k].y + dy}px, 0)`;
+      els[id].style.transform = `translate(${Math.round(drag.base[k].x + dx)}px, ${Math.round(drag.base[k].y + dy)}px)`;
     });
     setDropHighlight(findTarget(drag));
   });

@@ -226,9 +226,7 @@ body::after {
   top: 0;
   width: var(--cw);
   height: var(--ch);
-  perspective: 900px;
   cursor: grab;
-  will-change: transform;
   transition: transform 0.34s cubic-bezier(0.2, 0.8, 0.25, 1);
 }
 .card.down { cursor: pointer; }
@@ -237,22 +235,37 @@ body::after {
 .card .inner {
   position: absolute;
   inset: 0;
-  transform-style: preserve-3d;
-  transition: transform 0.5s cubic-bezier(0.3, 0.7, 0.3, 1);
 }
-.card.down .inner { transform: rotateY(180deg); }
-
-.no-anim .card,
-.no-anim .card .inner { transition: none !important; }
 
 .face, .back {
   position: absolute;
   inset: 0;
   border-radius: calc(var(--cw) * 0.09);
-  backface-visibility: hidden;
-  -webkit-backface-visibility: hidden;
   overflow: hidden;
 }
+
+/* At rest a card is flat and simply shows one side. */
+.card .back,
+.card.down .face { visibility: hidden; }
+.card.down .back { visibility: visible; }
+
+/* While turning over (.flip3d is added only for the flip) both sides become 3D planes. */
+.card.flip3d { perspective: 900px; }
+.card.flip3d .inner {
+  transform-style: preserve-3d;
+  transition: transform 0.5s cubic-bezier(0.3, 0.7, 0.3, 1);
+}
+.card.flip3d.down .inner { transform: rotateY(180deg); }
+.card.flip3d .face,
+.card.flip3d .back {
+  visibility: visible;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+.card.flip3d .back { transform: rotateY(180deg); }
+
+.no-anim .card,
+.no-anim .card .inner { transition: none !important; }
 
 .face {
   background: radial-gradient(circle at 28% 18%, #fffdf7 0%, #f6efdd 60%, #ecdfc1 100%);
@@ -351,7 +364,6 @@ body::after {
 .court .cs { font-size: calc(var(--cw) * 0.18); line-height: 1; font-family: 'Segoe UI Symbol', 'Apple Symbols', serif; }
 
 .back {
-  transform: rotateY(180deg);
   background-color: #123f39;
   background-image:
     linear-gradient(45deg, rgba(212, 175, 95, 0.2) 25%, transparent 25%, transparent 75%, rgba(212, 175, 95, 0.2) 75%),
