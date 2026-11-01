@@ -589,7 +589,7 @@
     const s = suitSVG(c.suit);
     let center;
     if (c.rank === 1) center = `<div class="center ace"><span>${s}</span></div>`;
-    else if (c.rank > 10) center = `<div class="center court"><span class="cl${c.rank < 13 ? ' desc' : ''}">${r}</span><span class="cs">${s}</span></div>`;
+    else if (c.rank > 10) center = `<div class="center court"><span class="cl${c.rank < 13 ? ' desc' : ''}">${r}</span></div>`;
     else center = `<div class="center pip"><span>${s}</span></div>`;
     const idx = pos => `<div class="idx ${pos}"><span class="r">${r}</span><span class="s">${s}</span></div>`;
     return `<div class="inner"><div class="face">${idx('top')}${center}${idx('bot')}</div><div class="back"></div></div>`;

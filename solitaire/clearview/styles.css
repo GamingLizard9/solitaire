@@ -352,8 +352,6 @@ a.brand:hover { opacity: 0.8; }
 .ace span { font-size: calc(var(--cw) * 0.58); line-height: 1; font-family: 'Segoe UI Symbol', 'Apple Symbols', serif; }
 
 .court {
-  flex-direction: column;
-  gap: calc(var(--cw) * 0.02);
   border: 1.5px solid var(--gold);
   border-radius: calc(var(--cw) * 0.05);
   background:
@@ -364,10 +362,11 @@ a.brand:hover { opacity: 0.8; }
 .court .cl {
   font: 800 calc(var(--cw) * 0.4)/1 'Playfair Display', Georgia, serif;
   text-shadow: 0 1px 0 rgba(255, 255, 255, 0.8), 0 0 10px rgba(212, 175, 95, 0.45);
+  /* Optical centering: Playfair's cap body sits below the line box's center */
+  transform: translateY(-0.06em);
 }
-/* J and Q descend below the baseline in Playfair; push the suit down to match K's spacing */
-.court .cl.desc { margin-bottom: calc(var(--cw) * 0.08); }
-.court .cs { font-size: calc(var(--cw) * 0.18); line-height: 1; font-family: 'Segoe UI Symbol', 'Apple Symbols', serif; }
+/* J and Q descend below the baseline; lift them partway toward centering the tail too */
+.court .cl.desc { transform: translateY(-0.11em); }
 
 .back {
   background-color: #123f39;
