@@ -168,8 +168,9 @@ body::after {
   transition: border-color 0.3s, background 0.3s, color 0.3s, box-shadow 0.3s;
 }
 
-.slot.found span { font-family: 'Playfair Display', serif; }
-.slot.found.red span { color: rgba(220, 110, 125, 0.42); }
+/* Opaque color + opacity: translucent text color shows the glyph's overlapping contours */
+.slot.found span { font-family: 'Playfair Display', serif; color: var(--gold); opacity: 0.38; }
+.slot.found.red span { color: rgb(220, 110, 125); opacity: 0.42; }
 
 .slot.track {
   border-style: dotted;
