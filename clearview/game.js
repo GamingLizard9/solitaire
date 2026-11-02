@@ -35,6 +35,9 @@
   const SETTINGS_KEY = 'clearview.settings.v1';
   const DRAW_COUNT = 3;
   const DIM_LOCKED = true; // darken cards buried under ones that can be played
+  const AUTO_STEP = 140;        // ms between safe auto-plays
+  const AUTO_BEAT = 400;        // ms pause after a card turns over, before it's auto-played
+  const AUTO_AFTER_FLIP = 500 + AUTO_BEAT; // the flip itself takes 0.5s
 
   const $ = sel => document.querySelector(sel);
   const board = $('#board');
@@ -202,7 +205,7 @@
     const n = Math.min(DRAW_COUNT, state.stock.length);
     for (let i = 0; i < n; i++) state.waste.push(state.stock.pop());
     state.moves++;
-    committed();
+    committed(false, false, AUTO_AFTER_FLIP);
     bump(slots.badge);
     if (!state.stock.length) setTimeout(() => toast('Deck exhausted — its spot is now a free cell'), 400);
   }
@@ -219,7 +222,7 @@
 
   // `auto` marks a safe auto-play: it rides on the previous move's undo snapshot and isn't
   // counted, so one Undo takes back a move together with the cards it sent home.
-  function committed(isUndo = false, auto = false) {
+  function committed(isUndo = false, auto = false, autoWait = AUTO_STEP) {
     hintIndex = 0;
     clearHint();
     if (!isUndo && !auto) {
@@ -234,7 +237,7 @@
     updateHud();
     checkWin();
     save();
-    if (!isUndo) autoPlay();
+    if (!isUndo) autoPlay(autoWait);
   }
 
   // Click / tap: send the card (and its run) to the best legal spot.
@@ -271,7 +274,7 @@
     return opp >= rank - 1 || (opp >= rank - 2 && twin >= rank - 3);
   }
 
-  function autoPlay() {
+  function autoPlay(wait = AUTO_STEP) {
     if (!settings.autoSafe || busy || meta.won || autoTimer) return;
     if (!nextFoundationMove(state, isSafeHome)) return;
     busy = true;
@@ -282,7 +285,7 @@
       if (!m) return;
       put(state, m.to, take(state, m.from, 1));
       committed(false, true); // chains into the next safe card, if any
-    }, 140);
+    }, wait);
   }
 
   function stopAutoPlay() {
@@ -626,7 +629,7 @@
     setTimeout(() => {
       for (const c of CARDS) els[c.id].style.transitionDelay = els[c.id].firstChild.style.transitionDelay = '';
       busy = false;
-      autoPlay();
+      autoPlay(AUTO_BEAT); // the deal's flips have finished by now
     }, 120 + k * 42 + 520);
   }
 
