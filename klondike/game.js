@@ -373,7 +373,7 @@
     const m = n - k;
     const avail = colX(3) - colX(1) - G.L.gap;
     const big = cw * 0.3;
-    const small = m ? Math.min(cw * 0.13, Math.max(0, (avail - cw - (k - 1) * big) / m)) : 0;
+    const small = m ? Math.min(cw * 0.22, Math.max(0, (avail - cw - (k - 1) * big) / m)) : 0;
     state.waste.forEach((id, i) => {
       const x = Math.round(colX(1) + (i <= m ? i * small : m * small + (i - m) * big));
       out[id] = { x, y: top, z: 100 + i, down: false, key: 'w', locked: i < n - 1 };
