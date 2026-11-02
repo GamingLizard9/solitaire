@@ -18,9 +18,8 @@
 
   const $ = sel => document.querySelector(sel);
 
-  // The shared engine's table. G.state is { stock, waste, fan, foundations[4], tableau[7],
-  // hidden[7], draw, moves }: hidden[c] counts the face-down cards at the bottom of column c,
-  // and fan is how many cards of the last draw are still fanned out on the waste.
+  // The shared engine's table. G.state is { stock, waste, foundations[4], tableau[7], hidden[7],
+  // draw, moves }: hidden[c] counts the face-down cards at the bottom of column c.
   let G;
 
   // ---------- Rules helpers ----------
@@ -50,7 +49,7 @@
     }
     const draw = DRAWS.includes(G.settings.draw) ? G.settings.draw : 1;
     return {
-      stock: deck.slice(k), waste: [], fan: 0, foundations: [[], [], [], []],
+      stock: deck.slice(k), waste: [], foundations: [[], [], [], []],
       tableau, hidden: tableau.map(col => col.length - 1), draw, moves: 0,
     };
   }
@@ -108,7 +107,6 @@
     const pile = pileOf(from, s);
     const ids = pile.splice(pile.length - count, count);
     if (from.type === 'tableau') s.hidden[from.idx] = Math.min(s.hidden[from.idx], Math.max(0, pile.length - 1));
-    if (from.type === 'waste') s.fan = Math.max(0, s.fan - 1);
     return ids;
   }
 
@@ -120,11 +118,9 @@
     if (s.stock.length) {
       const n = Math.min(s.draw, s.stock.length);
       for (let i = 0; i < n; i++) s.waste.push(s.stock.pop());
-      s.fan = n;
     } else {
       s.stock = s.waste.reverse();
       s.waste = [];
-      s.fan = 0;
     }
   }
 
@@ -366,16 +362,13 @@
       out[id] = { x: -t, y: top - t, z: 10 + i, down: true, key: 's' };
     });
 
-    // Waste: the cards of the last draw that are still there are fanned wide; older cards
-    // squeeze in behind them across the rest of the row.
+    // Waste: the newest cards are fanned far enough apart to read each one's rank and suit
+    // (a "10" is the widest corner); older cards beyond what the row holds tuck squarely under them.
     const n = state.waste.length;
-    const k = n ? Math.min(n, Math.max(1, state.fan)) : 0;
-    const m = n - k;
-    const avail = colX(3) - colX(1) - G.L.gap;
-    const big = cw * 0.3;
-    const small = m ? Math.min(cw * 0.22, Math.max(0, (avail - cw - (k - 1) * big) / m)) : 0;
+    const step = cw * 0.36;
+    const spread = 1 + Math.floor((colX(3) - colX(1) - G.L.gap - cw) / step);
     state.waste.forEach((id, i) => {
-      const x = Math.round(colX(1) + (i <= m ? i * small : m * small + (i - m) * big));
+      const x = Math.round(colX(1) + Math.max(0, i - (n - spread)) * step);
       out[id] = { x, y: top, z: 100 + i, down: false, key: 'w', locked: i < n - 1 };
     });
 
