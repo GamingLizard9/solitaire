@@ -820,7 +820,9 @@
     $('#moves').textContent = state.moves;
     $('#time').textContent = fmtTime(elapsed());
     $('#btn-undo').disabled = !history.length || meta.won;
-    $('#btn-auto').classList.toggle('hidden', busy || !canAutoFinish());
+    // While safe auto-play still has a card to send home, it's about to move on its own.
+    const autoPending = settings.autoSafe && !!nextFoundationMove(state, isSafeHome);
+    $('#btn-auto').classList.toggle('hidden', busy || autoPending || !canAutoFinish());
   }
 
   // ---------- Winning ----------
@@ -984,6 +986,7 @@
     if (key === 'autoSafe') {
       if (settings.autoSafe) autoPlay();
       else stopAutoPlay();
+      updateHud();
     }
   });
 
