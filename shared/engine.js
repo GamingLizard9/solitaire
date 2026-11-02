@@ -84,7 +84,10 @@ window.Solitaire = (() => {
   //   rulesHTML()
   // and optionally: nextAuto() returning a step function, autoStep, afterDealWait,
   //   press(id, loc), afterRender(), updateHud(), onKey(key, e), wire(),
-  //   settingsDefaults, settingsHTML(), onSetting(key), maxWidth.
+  //   settingsDefaults, settingsHTML(), onSetting(key), maxWidth,
+  //   flipWait                 ms to hold automatic steps after a card turns face up,
+  //   dealOptions              { key, prompt, choices: [{ value, label, sub, icon? }] }: a choice
+  //                            offered at every new deal, kept in G.settings[key].
   function createGame(game) {
     const $ = sel => document.querySelector(sel);
     const board = $('#board');
@@ -166,11 +169,11 @@ window.Solitaire = (() => {
         }
         if (clock.since === null) clock.since = Date.now();
       }
-      render();
+      const turned = render();
       updateHud();
       checkWin();
       save();
-      if (!isUndo) autoPlay(autoWait);
+      if (!isUndo) autoPlay(turned && game.flipWait ? Math.max(autoWait, game.flipWait) : autoWait);
     }
 
     // Click / tap: send the card (and its run) to the best legal spot.
@@ -308,6 +311,7 @@ window.Solitaire = (() => {
         void board.offsetWidth;
         board.classList.remove('no-anim');
       }
+      return flips.some(f => !f.down); // did a card turn face up?
     }
 
     function dealAnimation() {
@@ -541,7 +545,9 @@ window.Solitaire = (() => {
             <div><b>${G.stats.wins}</b><span>Total wins</span></div>
             <div><b>${G.stats.best ? fmtTime(G.stats.best) : '—'}</b><span>Best time</span></div>
           </div>
-          <div class="row"><button class="btn gold" data-action="new-force">Deal again</button></div>
+          ${game.dealOptions
+            ? `<h3>Deal again</h3>${dealPicker()}`
+            : '<div class="row"><button class="btn gold" data-action="new-force">Deal again</button></div>'}
         </div>`);
       confetti();
     }
@@ -598,8 +604,28 @@ window.Solitaire = (() => {
         <div class="row"><button class="btn gold" data-action="close">Done</button></div>`);
     }
 
+    // The buttons for a game's deal options, with the last one dealt marked.
+    function dealPicker() {
+      const { key, choices } = game.dealOptions;
+      return `<div class="deal-options">${choices.map((c, i) => `
+        <button class="deal-opt${c.value === G.settings[key] ? ' current' : ''}" data-action="deal" data-choice="${i}">
+          ${c.icon || ''}<b>${c.label}</b><small>${c.sub}</small>
+        </button>`).join('')}</div>`;
+    }
+
     function newGame(force = false) {
-      if (!force && !G.meta.won && G.state.moves > 0) {
+      const inProgress = !G.meta.won && G.state.moves > 0;
+      if (game.dealOptions) {
+        // Every new deal starts by picking an option; the picker doubles as the confirmation.
+        openModal(`
+          <button class="close-x" data-action="close" aria-label="Close">✕</button>
+          <h2>New game</h2>
+          <p class="sub">${game.dealOptions.prompt}${inProgress ? ' The current game will be abandoned.' : ''}</p>
+          ${dealPicker()}
+          <div class="row"><button class="btn" data-action="close">${inProgress ? 'Keep playing' : 'Cancel'}</button></div>`);
+        return;
+      }
+      if (!force && inProgress) {
         openModal(`
           <h2>New game?</h2>
           <p class="sub">The current game will be abandoned.</p>
@@ -608,6 +634,14 @@ window.Solitaire = (() => {
             <button class="btn gold" data-action="new-force">Deal new game</button>
           </div>`);
         return;
+      }
+      deal();
+    }
+
+    function deal(choice = null) {
+      if (choice !== null) {
+        G.settings[game.dealOptions.key] = game.dealOptions.choices[choice].value;
+        saveSettings();
       }
       if (modalOpen()) closeModal();
       winTimers.forEach(clearTimeout);
@@ -628,7 +662,8 @@ window.Solitaire = (() => {
     modal.addEventListener('click', e => {
       const action = e.target.closest('[data-action]')?.dataset.action;
       if (action === 'close') closeModal();
-      else if (action === 'new-force') newGame(true);
+      else if (action === 'new-force') deal();
+      else if (action === 'deal') deal(+e.target.closest('[data-choice]').dataset.choice);
       else if (e.target === modal) closeModal();
     });
 
@@ -702,7 +737,7 @@ window.Solitaire = (() => {
       } else {
         G.state = game.freshState();
         G.meta = { counted: false, won: false, elapsed: 0 };
-        newGame(true);
+        deal();
         if (!G.stats.played) setTimeout(showRules, 1600);
       }
       setInterval(() => { $('#time').textContent = fmtTime(elapsed()); }, 1000);

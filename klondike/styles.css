@@ -1,0 +1,175 @@
+/* Klondike: oxblood felt and polished silver. The shared table styles live in ../shared/table.css. */
+
+:root {
+  --felt-1: #6e2230;
+  --felt-2: #3a0e18;
+  --felt-3: #1a050a;
+  --accent: #c3c9d4;
+  --accent-light: #eef1f6;
+  --accent-rgb: 195, 201, 212;
+  --accent-line: rgba(128, 136, 154, 0.55);
+  --btn-1: #f1f3f8;
+  --btn-2: #9aa2b2;
+  --btn-1-hover: #ffffff;
+  --btn-2-hover: #aab2c1;
+  --btn-ink: #1e0a10;
+  --btn-glow-rgb: 228, 233, 242;
+  --face-1: #fffdfa;
+  --face-2: #f5f1ea;
+  --face-3: #e5ded3;
+  --red: #b8263a;
+  --ink: #1c1f2a;
+  --mint: #7fe3d3;
+  --mint-rgb: 127, 227, 211;
+  --mint-light: #dbfff8;
+  --hint-rgb: 255, 212, 130;
+  --hint-light: #fff0cc;
+  --text: #f5ece8;
+  --locked-shade: rgba(34, 6, 14, 0.45);
+  --toast-bg: rgba(38, 9, 16, 0.94);
+  --modal-bg: rgba(16, 3, 7, 0.62);
+  --panel-1: #5a1a26;
+  --panel-2: #2c0a12;
+  --panel-rim: rgba(44, 10, 18, 0.9);
+  --back: #861a2c;
+  --back-deep: #4c0c18;
+  --confetti: #eef1f6 #c3c9d4 #b8263a #fffdfa #7fe3d3;
+}
+
+/* ---------- Top row: deck, waste, foundations ---------- */
+
+/* Opaque color + opacity: translucent text color shows the glyph's overlapping contours */
+.slot.found span { color: var(--accent); opacity: 0.32; }
+.slot.found.red span { color: rgb(236, 128, 142); opacity: 0.42; }
+
+.slot.track {
+  border-style: dotted;
+  border-color: rgba(var(--accent-rgb), 0.16);
+  background: transparent;
+  font: 600 calc(var(--cw) * 0.1)/1 'Outfit', sans-serif;
+  letter-spacing: 0.35em;
+  text-transform: uppercase;
+  color: rgba(var(--accent-rgb), 0.28);
+}
+
+/* An empty deck turns the waste back over when tapped. */
+.slot.stock .recycle-ico { width: 42%; height: auto; opacity: 0; transition: opacity 0.3s; }
+.slot.stock.recycle { cursor: pointer; border-style: solid; color: rgba(var(--accent-rgb), 0.7); }
+.slot.stock.recycle .recycle-ico { opacity: 1; }
+.slot.stock.recycle:hover { background: rgba(var(--accent-rgb), 0.1); border-color: var(--accent); }
+.slot.stock.hint { animation: glowHint 0.9s ease-in-out infinite; }
+
+/* Empty columns take only a King. */
+.slot.tab .king {
+  font: 400 calc(var(--cw) * 0.36)/1 'Poiret One', serif;
+  opacity: 0.55;
+}
+
+.badge {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 900;
+  min-width: 24px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--btn-1), var(--btn-2));
+  color: var(--btn-ink);
+  font: 700 12px/1 'Outfit', sans-serif;
+  text-align: center;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+  transition: opacity 0.3s;
+}
+.badge.bump { animation: bump 0.4s ease; }
+
+/* ---------- Card faces: aces and courts ---------- */
+
+/* Aces sit on an eight-pointed star, echoing the medallion on the back. */
+.ace::before,
+.ace::after {
+  content: '';
+  position: absolute;
+  width: 64%;
+  aspect-ratio: 1;
+  border: 1.5px solid var(--accent-line);
+  background: rgba(var(--accent-rgb), 0.1);
+}
+.ace::after { transform: rotate(45deg); }
+.ace span { z-index: 1; font-size: calc(var(--cw) * 0.5); line-height: 1; }
+
+.court {
+  flex-direction: column;
+  gap: calc(var(--cw) * 0.07); /* clears the descending tails of J and Q */
+  border: 1.5px solid var(--accent-line);
+  border-radius: calc(var(--cw) * 0.05);
+  background:
+    radial-gradient(circle calc(var(--cw) * 0.09) at 50% 100%, transparent 0 70%, rgba(var(--accent-rgb), 0.38) 70% 85%, transparent 85%) 0 0 / calc(var(--cw) * 0.14) calc(var(--cw) * 0.14),
+    radial-gradient(circle calc(var(--cw) * 0.09) at 50% 100%, transparent 0 70%, rgba(var(--accent-rgb), 0.38) 70% 85%, transparent 85%) calc(var(--cw) * 0.07) calc(var(--cw) * 0.07) / calc(var(--cw) * 0.14) calc(var(--cw) * 0.14),
+    linear-gradient(#fffdfa, #ece6dc);
+  box-shadow: inset 0 0 0 2px rgba(255, 253, 250, 0.9), inset 0 0 0 3px var(--accent-line);
+}
+.court .cl {
+  font: 800 calc(var(--cw) * 0.32)/1 'Playfair Display', Georgia, serif;
+  text-shadow: 0 0 6px #fffdfa, 0 0 2px #fffdfa;
+}
+.court .cs { font-size: calc(var(--cw) * 0.17); filter: drop-shadow(0 0 3px #fffdfa); }
+
+/* ---------- Card back: silver fish-scales with a star medallion ---------- */
+
+.back {
+  --scale: calc(var(--cw) * 0.15);
+  background-color: var(--back);
+  background-image:
+    radial-gradient(ellipse at 50% 50%, transparent 0 30%, rgba(40, 4, 12, 0.55) 85%),
+    radial-gradient(circle calc(var(--scale) * 0.6) at 50% 100%, transparent 0 74%, rgba(var(--accent-rgb), 0.34) 74% 88%, transparent 88%),
+    radial-gradient(circle calc(var(--scale) * 0.6) at 50% 100%, transparent 0 74%, rgba(var(--accent-rgb), 0.34) 74% 88%, transparent 88%);
+  background-size: 100% 100%, var(--scale) var(--scale), var(--scale) var(--scale);
+  background-position: 0 0, 0 0, calc(var(--scale) / 2) calc(var(--scale) / 2);
+  border: 1px solid rgba(0, 0, 0, 0.45);
+  box-shadow:
+    inset 0 0 0 calc(var(--cw) * 0.04) var(--back-deep),
+    inset 0 0 0 calc(var(--cw) * 0.052) var(--accent),
+    inset 0 0 0 calc(var(--cw) * 0.07) var(--back-deep),
+    0 1px 2px rgba(0, 0, 0, 0.35), 0 3px 8px rgba(0, 0, 0, 0.2);
+}
+.back::before,
+.back::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: calc(var(--cw) * 0.27);
+  height: calc(var(--cw) * 0.27);
+  border: 2px solid var(--accent);
+  background: var(--back-deep);
+  box-shadow: 0 0 0 3px var(--back-deep);
+}
+.back::before { transform: translate(-50%, -50%); }
+.back::after {
+  transform: translate(-50%, -50%) rotate(45deg);
+  background: radial-gradient(circle, var(--accent-light) 0 12%, var(--back-deep) 13% 40%, rgba(var(--accent-rgb), 0.7) 41% 47%, var(--back-deep) 48%);
+  box-shadow: none;
+}
+
+/* ---------- Deal picker: a little fan of cards per option ---------- */
+
+.deal-fan {
+  position: relative;
+  width: 54px;
+  height: 44px;
+  margin-bottom: 4px;
+}
+.deal-fan i {
+  position: absolute;
+  left: 14px;
+  top: 4px;
+  width: 26px;
+  height: 36px;
+  border-radius: 4px;
+  background: linear-gradient(var(--face-1), var(--face-3));
+  border: 1px solid rgba(0, 0, 0, 0.25);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.35);
+  transform: rotate(calc(var(--k) * 15deg));
+  transform-origin: 50% 120%;
+}

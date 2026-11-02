@@ -173,6 +173,23 @@ a.quartet:hover, a.quartet:focus-visible { border-color: #d98b5f; background: rg
   border-color: #d98b5f;
 }
 
+/* Klondike's card keeps its own oxblood and silver look */
+.klondike { border-color: rgba(195, 201, 212, 0.4); }
+a.klondike:hover, a.klondike:focus-visible { border-color: #c3c9d4; background: rgba(195, 201, 212, 0.08); }
+.klondike .preview {
+  border-bottom-color: rgba(195, 201, 212, 0.22);
+  background: radial-gradient(ellipse at 50% 30%, rgba(110, 34, 48, 0.95), rgba(58, 14, 24, 0.95));
+}
+.klondike .info h2 { color: #eef1f6; }
+.klondike .play { background: linear-gradient(135deg, #f1f3f8, #9aa2b2); color: #1e0a10; }
+.klondike .mini.back {
+  background:
+    radial-gradient(circle 6px at 50% 100%, transparent 0 70%, rgba(195, 201, 212, 0.45) 70% 90%, transparent 90%) 0 0 / 10px 10px,
+    radial-gradient(circle 6px at 50% 100%, transparent 0 70%, rgba(195, 201, 212, 0.45) 70% 90%, transparent 90%) 5px 5px / 10px 10px,
+    #861a2c;
+  border-color: #c3c9d4;
+}
+
 .info { display: flex; flex-direction: column; flex: 1; padding: 18px 20px 20px; }
 
 .info h2 {
