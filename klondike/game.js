@@ -366,13 +366,17 @@
       out[id] = { x: -t, y: top - t, z: 10 + i, down: true, key: 's' };
     });
 
-    // Waste: the cards of the last draw that are still there are fanned out; older ones are
-    // squared up beneath them.
+    // Waste: the cards of the last draw that are still there are fanned wide; older cards
+    // squeeze in behind them across the rest of the row.
     const n = state.waste.length;
-    const shown = n ? Math.min(n, Math.max(1, state.fan)) : 0;
+    const k = n ? Math.min(n, Math.max(1, state.fan)) : 0;
+    const m = n - k;
+    const avail = colX(3) - colX(1) - G.L.gap;
+    const big = cw * 0.3;
+    const small = m ? Math.min(cw * 0.13, Math.max(0, (avail - cw - (k - 1) * big) / m)) : 0;
     state.waste.forEach((id, i) => {
-      const k = Math.max(0, i - (n - shown));
-      out[id] = { x: Math.round(colX(1) + k * cw * 0.3), y: top, z: 100 + i, down: false, key: 'w', locked: i < n - 1 };
+      const x = Math.round(colX(1) + (i <= m ? i * small : m * small + (i - m) * big));
+      out[id] = { x, y: top, z: 100 + i, down: false, key: 'w', locked: i < n - 1 };
     });
 
     state.foundations.forEach((f, fi) => {
