@@ -32,6 +32,7 @@
 
   const GAME_KEY = 'clearview.game.v1';
   const STATS_KEY = 'clearview.stats.v1';
+  const SETTINGS_KEY = 'clearview.settings.v1';
   const DRAW_COUNT = 3;
   const DIM_LOCKED = true; // darken cards buried under ones that can be played
 
@@ -44,6 +45,7 @@
   let history = [];  // JSON snapshots of previous states, for undo
   let meta;          // { counted, won, elapsed } — per-game bookkeeping that undo doesn't touch
   let stats;         // { wins, played, best }
+  let settings;      // { autoSafe }
   let L = {};        // layout metrics
   let P = {};        // card id -> { x, y, z, down, key }
   const els = [];
@@ -54,6 +56,7 @@
   let hintIndex = 0;
   let dropEl = null;
   let winTimers = [];
+  let autoTimer = null;
   const clock = { acc: 0, since: null };
 
   // ---------- Storage ----------
@@ -77,6 +80,7 @@
   }
 
   const saveStats = () => store(STATS_KEY, stats);
+  const saveSettings = () => store(SETTINGS_KEY, settings);
 
   // ---------- Rules helpers ----------
 
@@ -213,10 +217,12 @@
     committed(true);
   }
 
-  function committed(isUndo = false) {
+  // `auto` marks a safe auto-play: it rides on the previous move's undo snapshot and isn't
+  // counted, so one Undo takes back a move together with the cards it sent home.
+  function committed(isUndo = false, auto = false) {
     hintIndex = 0;
     clearHint();
-    if (!isUndo) {
+    if (!isUndo && !auto) {
       if (!meta.counted) {
         meta.counted = true;
         stats.played++;
@@ -228,6 +234,7 @@
     updateHud();
     checkWin();
     save();
+    if (!isUndo) autoPlay();
   }
 
   // Click / tap: send the card (and its run) to the best legal spot.
@@ -245,9 +252,49 @@
     else shake(ids);
   }
 
+  // ---------- Safe auto-play ----------
+
+  // A card is safe to send home when no winning line could still need it in the tableau.
+  // With rank r, the only cards that can sit on it are the two opposite-colour (r-1)s; on
+  // those, only its own (r-2) — already home — and its same-colour twin's (r-2); on that,
+  // only opposite-colour (r-3)s. So it's safe once both opposite-colour foundations reach
+  // r-1, or reach r-2 while the twin suit reaches r-3: then each of those (r-1)s and the
+  // (r-2) can go straight home whenever a winning line would have put it on this card.
+  // Foundation cards never come back, so any win from before the move has a counterpart
+  // after it, and auto-playing such cards never turns a winnable deal into a lost one.
+  function isSafeHome(id, s = state) {
+    const { rank, suit } = card(id);
+    const f = s.foundations;
+    if (rank !== f[suit].length + 1) return false;
+    const opp = Math.min(f[(suit + 1) % 4].length, f[(suit + 3) % 4].length);
+    const twin = f[(suit + 2) % 4].length;
+    return opp >= rank - 1 || (opp >= rank - 2 && twin >= rank - 3);
+  }
+
+  function autoPlay() {
+    if (!settings.autoSafe || busy || meta.won || autoTimer) return;
+    if (!nextFoundationMove(state, isSafeHome)) return;
+    busy = true;
+    autoTimer = setTimeout(() => {
+      autoTimer = null;
+      busy = false;
+      const m = settings.autoSafe && !meta.won && nextFoundationMove(state, isSafeHome);
+      if (!m) return;
+      put(state, m.to, take(state, m.from, 1));
+      committed(false, true); // chains into the next safe card, if any
+    }, 140);
+  }
+
+  function stopAutoPlay() {
+    if (!autoTimer) return;
+    clearTimeout(autoTimer);
+    autoTimer = null;
+    busy = false;
+  }
+
   // ---------- Auto-finish ----------
 
-  function nextFoundationMove(s) {
+  function nextFoundationMove(s, allow = () => true) {
     const sources = [];
     if (s.waste.length) sources.push({ from: { type: 'waste' }, id: last(s.waste) });
     if (s.free !== null) sources.push({ from: { type: 'free' }, id: s.free });
@@ -257,7 +304,7 @@
     let best = null;
     for (const src of sources) {
       const c = card(src.id);
-      if (c.rank === s.foundations[c.suit].length + 1 && (!best || c.rank < card(best.ids[0]).rank)) {
+      if (c.rank === s.foundations[c.suit].length + 1 && allow(src.id, s) && (!best || c.rank < card(best.ids[0]).rank)) {
         best = { from: src.from, ids: [src.id], to: { type: 'found', idx: c.suit } };
       }
     }
@@ -579,6 +626,7 @@
     setTimeout(() => {
       for (const c of CARDS) els[c.id].style.transitionDelay = els[c.id].firstChild.style.transitionDelay = '';
       busy = false;
+      autoPlay();
     }, 120 + k * 42 + 520);
   }
 
@@ -880,6 +928,12 @@
         <li>Drag cards to move them, or tap a card to send it to the best legal spot.</li>
         <li><kbd>Space</kbd> draw · <kbd>Z</kbd> undo · <kbd>H</kbd> hint · <kbd>N</kbd> new game · <kbd>R</kbd> rules</li>
       </ul>
+      <h3>Settings</h3>
+      <label class="toggle">
+        <input type="checkbox" data-setting="autoSafe"${settings.autoSafe ? ' checked' : ''}>
+        <span class="switch" aria-hidden="true"></span>
+        <span><b>Auto-play safe cards</b><small>Sends a card home automatically once nothing could still need it in the columns. This never turns a winnable game into a lost one.</small></span>
+      </label>
       <h3>Your record</h3>
       <ul><li>${stats.wins} win${stats.wins === 1 ? '' : 's'} from ${stats.played} game${stats.played === 1 ? '' : 's'} played${stats.best ? ` · best time ${fmtTime(stats.best)}` : ''}.</li></ul>
       <div class="row"><button class="btn gold" data-action="close">Let's play</button></div>`);
@@ -899,6 +953,7 @@
     if (modalOpen()) closeModal();
     winTimers.forEach(clearTimeout);
     winTimers = [];
+    stopAutoPlay();
     clearHint();
     state = freshState();
     history = [];
@@ -916,6 +971,17 @@
     if (action === 'close') closeModal();
     else if (action === 'new-force') newGame(true);
     else if (e.target === modal) closeModal();
+  });
+
+  modal.addEventListener('change', e => {
+    const key = e.target.dataset.setting;
+    if (!key) return;
+    settings[key] = e.target.checked;
+    saveSettings();
+    if (key === 'autoSafe') {
+      if (settings.autoSafe) autoPlay();
+      else stopAutoPlay();
+    }
   });
 
   // ---------- Wiring ----------
@@ -965,6 +1031,7 @@
 
   function init() {
     stats = Object.assign({ wins: 0, played: 0, best: null }, load(STATS_KEY, {}));
+    settings = Object.assign({ autoSafe: true }, load(SETTINGS_KEY, {}));
     build();
     layout();
     const saved = load(GAME_KEY, null);
@@ -978,6 +1045,7 @@
       clock.since = meta.counted ? Date.now() : null;
       render({ instant: true });
       updateHud();
+      autoPlay();
     } else {
       state = freshState();
       meta = { counted: false, won: false, elapsed: 0 };
