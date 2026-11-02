@@ -931,17 +931,23 @@
       <h3>Controls</h3>
       <ul>
         <li>Drag cards to move them, or tap a card to send it to the best legal spot.</li>
-        <li><kbd>Space</kbd> draw · <kbd>Z</kbd> undo · <kbd>H</kbd> hint · <kbd>N</kbd> new game · <kbd>R</kbd> rules</li>
+        <li><kbd>Space</kbd> draw · <kbd>Z</kbd> undo · <kbd>H</kbd> hint · <kbd>N</kbd> new game · <kbd>R</kbd> rules · <kbd>S</kbd> settings</li>
       </ul>
-      <h3>Settings</h3>
+      <h3>Your record</h3>
+      <ul><li>${stats.wins} win${stats.wins === 1 ? '' : 's'} from ${stats.played} game${stats.played === 1 ? '' : 's'} played${stats.best ? ` · best time ${fmtTime(stats.best)}` : ''}.</li></ul>
+      <div class="row"><button class="btn gold" data-action="close">Let's play</button></div>`);
+  }
+
+  function showSettings() {
+    openModal(`
+      <button class="close-x" data-action="close" aria-label="Close">✕</button>
+      <h2>Settings</h2>
       <label class="toggle">
         <input type="checkbox" data-setting="autoSafe"${settings.autoSafe ? ' checked' : ''}>
         <span class="switch" aria-hidden="true"></span>
         <span><b>Auto-play safe cards</b><small>Sends a card home automatically once nothing could still need it in the columns. This never turns a winnable game into a lost one.</small></span>
       </label>
-      <h3>Your record</h3>
-      <ul><li>${stats.wins} win${stats.wins === 1 ? '' : 's'} from ${stats.played} game${stats.played === 1 ? '' : 's'} played${stats.best ? ` · best time ${fmtTime(stats.best)}` : ''}.</li></ul>
-      <div class="row"><button class="btn gold" data-action="close">Let's play</button></div>`);
+      <div class="row"><button class="btn gold" data-action="close">Done</button></div>`);
   }
 
   function newGame(force = false) {
@@ -996,6 +1002,7 @@
   $('#btn-undo').addEventListener('click', undo);
   $('#btn-hint').addEventListener('click', showHint);
   $('#btn-rules').addEventListener('click', showRules);
+  $('#btn-settings').addEventListener('click', showSettings);
   $('#btn-auto').addEventListener('click', autoFinish);
 
   document.addEventListener('keydown', e => {
@@ -1010,6 +1017,7 @@
     else if (key === 'h') showHint();
     else if (key === 'n') newGame();
     else if (key === 'r') showRules();
+    else if (key === 's') showSettings();
     else if (key === ' ' || key === 'd') { e.preventDefault(); draw(); }
   });
 
