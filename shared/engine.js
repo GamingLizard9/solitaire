@@ -709,7 +709,7 @@ window.Solitaire = (() => {
     }
 
     Object.assign(G, {
-      makeSlot, move, snapshot, committed, render, updateHud, autoPlay, stopAutoPlay,
+      makeSlot, move, snapshot, committed, layout, render, updateHud, autoPlay, stopAutoPlay,
       toast, shake, bump, start,
     });
     return G;

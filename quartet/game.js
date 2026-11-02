@@ -188,41 +188,62 @@
 
   // ---------- Layout & rendering ----------
 
-  const colX = c => c * (G.L.cw + G.L.gap);
-  const FREE_COL = 4;
+  // Where column c starts, and how far down its cards may fan. With two rows the first five
+  // columns sit on top and the other four are centred beneath them.
+  function colPos(c) {
+    const { per, cw, gap, ch, h, rowY } = G.L;
+    const row = Math.floor(c / per);
+    const inRow = Math.min(per, COLS - row * per);
+    const x = Math.round((c % per + (per - inRow) / 2) * (cw + gap));
+    const end = row + 1 < rowY.length ? rowY[row + 1] - Math.max(gap, 10) : h - 8;
+    return { x, y: rowY[row], room: end - rowY[row] - ch };
+  }
+
+  const freeX = () => Math.floor(G.L.per / 2) * (G.L.cw + G.L.gap);
 
   function layout(availW, availH) {
     const gapR = 0.14;
-    let cw = availW / (COLS + (COLS - 1) * gapR);
-    cw = Math.min(cw, 116, availH / 1.4 / 3.6);
-    cw = Math.floor(Math.max(cw, 30));
+    // The card width for `per` columns across, when the board is `tall` card heights high.
+    const fit = (per, tall) =>
+      Math.floor(Math.max(30, Math.min(availW / (per + (per - 1) * gapR), 116, availH / 1.4 / tall)));
+    let per = COLS;
+    let cw = fit(COLS, 3.6);
+    // Two rows only when they give bigger cards, i.e. on tall, narrow screens. Each row
+    // keeps room to fan about six cards.
+    if (G.settings.twoRows && fit(5, 6) > cw) {
+      per = 5;
+      cw = fit(5, 6);
+    }
     const ch = Math.round(cw * 1.4);
     const gap = Math.round(cw * gapR);
     const top = 6;
-    G.L = { cw, ch, gap, top, w: COLS * cw + (COLS - 1) * gap, h: availH, tabY: top + ch + Math.max(Math.round(gap * 1.6), 14) };
+    const tabY = top + ch + Math.max(Math.round(gap * 1.6), 14);
+    const rows = Math.ceil(COLS / per);
+    const rowY = Array.from({ length: rows }, (_, r) => Math.round(tabY + r * (availH - tabY) / rows));
+    G.L = { cw, ch, gap, top, per, rowY, w: per * cw + (per - 1) * gap, h: availH };
 
     const { slots } = G;
-    const sideW = colX(FREE_COL) - gap;
-    place(slots.free, colX(FREE_COL), top);
+    const sideW = freeX() - gap;
+    place(slots.free, freeX(), top);
     place(slots.seals, 0, top);
-    place(slots.runs, colX(FREE_COL + 1), top);
+    place(slots.runs, freeX() + cw + gap, top);
     slots.seals.style.width = slots.runs.style.width = sideW + 'px';
-    slots.tab.forEach((el, c) => place(el, colX(c), G.L.tabY));
+    slots.tab.forEach((el, c) => place(el, colPos(c).x, colPos(c).y));
   }
 
   function positions() {
     const s = G.state;
     const out = {};
-    const { ch, top, tabY } = G.L;
+    const { ch, top } = G.L;
 
-    if (s.free !== null) out[s.free] = { x: colX(FREE_COL), y: top, z: 60, down: false, key: 'free' };
+    if (s.free !== null) out[s.free] = { x: freeX(), y: top, z: 60, down: false, key: 'free' };
 
-    const room = G.L.h - tabY - ch - 8;
     s.tableau.forEach((col, c) => {
+      const { x, y, room } = colPos(c);
       if (s.sealed[c]) {
         // A sealed column is a squared-up, face-down pile.
         col.forEach((id, i) => {
-          out[id] = { x: colX(c) - i, y: tabY - i, z: 400 + i, down: true, key: 't' + c };
+          out[id] = { x: x - i, y: y - i, z: 400 + i, down: true, key: 't' + c };
         });
         return;
       }
@@ -231,7 +252,7 @@
       let runStart = col.length - 1;
       while (runStart > 0 && fits(col[runStart], col[runStart - 1])) runStart--;
       col.forEach((id, i) => {
-        out[id] = { x: colX(c), y: Math.round(tabY + i * off), z: 400 + i, down: false, key: 't' + c, locked: i < runStart };
+        out[id] = { x, y: Math.round(y + i * off), z: 400 + i, down: false, key: 't' + c, locked: i < runStart };
       });
     });
     return out;
@@ -257,9 +278,9 @@
     const { L, P, state } = G;
     const zones = state.tableau.map((col, c) => ({
       to: { type: 'tableau', idx: c },
-      x: colX(c), y: col.length ? P[last(col)].y : L.tabY, w: L.cw, h: L.ch * 1.5,
+      x: colPos(c).x, y: col.length ? P[last(col)].y : colPos(c).y, w: L.cw, h: L.ch * 1.5,
     }));
-    zones.push({ to: { type: 'free' }, x: colX(FREE_COL), y: L.top, w: L.cw, h: L.ch });
+    zones.push({ to: { type: 'free' }, x: freeX(), y: L.top, w: L.cw, h: L.ch });
     return zones;
   }
 
@@ -329,8 +350,21 @@
     <h3>Controls</h3>
     <ul>
       <li>Drag cards to move them, or tap a card to send it to the best legal spot.</li>
-      <li><kbd>Z</kbd> undo · <kbd>H</kbd> hint · <kbd>N</kbd> new game · <kbd>R</kbd> rules</li>
+      <li><kbd>Z</kbd> undo · <kbd>H</kbd> hint · <kbd>N</kbd> new game · <kbd>R</kbd> rules · <kbd>S</kbd> settings</li>
     </ul>`;
+
+  const settingsHTML = () => `
+    <label class="toggle">
+      <input type="checkbox" data-setting="twoRows"${G.settings.twoRows ? ' checked' : ''}>
+      <span class="switch" aria-hidden="true"></span>
+      <span><b>Two-row layout</b><small>On tall, narrow screens like phones, splits the nine columns into rows of five and four so the cards can be bigger. Wide screens keep a single row.</small></span>
+    </label>`;
+
+  function onSetting(key) {
+    if (key !== 'twoRows') return;
+    G.layout();
+    if (!G.meta.won) G.render();
+  }
 
   // ---------- Start ----------
 
@@ -359,10 +393,13 @@
     findHints,
     describe,
     dealOrder,
-    dealFrom: () => ({ x: colX(FREE_COL), y: G.L.top, key: 'deal' }),
+    dealFrom: () => ({ x: freeX(), y: G.L.top, key: 'deal' }),
     nextAuto,
     autoStep: SEAL_WAIT,
     rulesHTML,
+    settingsDefaults: { twoRows: false },
+    settingsHTML,
+    onSetting,
   });
 
   G.start();
