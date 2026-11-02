@@ -85,7 +85,6 @@ window.Solitaire = (() => {
   // and optionally: nextAuto() returning a step function, autoStep, afterDealWait,
   //   press(id, loc), afterRender(), updateHud(), onKey(key, e), wire(),
   //   settingsDefaults, settingsHTML(), onSetting(key), maxWidth,
-  //   flipWait                 ms to hold automatic steps after a card turns face up,
   //   dealOptions              { key, prompt, choices: [{ value, label, sub, icon? }] }: a choice
   //                            offered at every new deal, kept in G.settings[key].
   function createGame(game) {
@@ -169,11 +168,11 @@ window.Solitaire = (() => {
         }
         if (clock.since === null) clock.since = Date.now();
       }
-      const turned = render();
+      render();
       updateHud();
       checkWin();
       save();
-      if (!isUndo) autoPlay(turned && game.flipWait ? Math.max(autoWait, game.flipWait) : autoWait);
+      if (!isUndo) autoPlay(autoWait);
     }
 
     // Click / tap: send the card (and its run) to the best legal spot.
@@ -311,7 +310,6 @@ window.Solitaire = (() => {
         void board.offsetWidth;
         board.classList.remove('no-anim');
       }
-      return flips.some(f => !f.down); // did a card turn face up?
     }
 
     function dealAnimation() {

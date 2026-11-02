@@ -551,7 +551,6 @@
     dealOrder,
     dealFrom: () => ({ x: 0, y: G.L.top, key: 's' }),
     nextAuto,
-    flipWait: AUTO_AFTER_FLIP,
     afterDealWait: AUTO_BEAT,
     press: (id, loc) => {
       if (loc.type !== 'stock') return false;
