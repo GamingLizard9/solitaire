@@ -488,7 +488,7 @@
     </ul>
     <h3>The deck</h3>
     <ul>
-      <li>Each new deal lets you choose to turn 1, 2 or 3 cards at a time. Only the top card of the waste can be played.</li>
+      <li>The deck turns over 1, 2 or 3 cards at a time; choose which in Settings. Only the top card of the waste can be played.</li>
       <li>When the deck runs out, tap its empty spot to turn the waste back over. You can go through the deck as often as you like.</li>
       <li>This game is set to draw ${G.state.draw}.</li>
     </ul>
@@ -566,6 +566,7 @@
     onSetting,
     dealOptions: {
       key: 'draw',
+      title: 'Cards per draw',
       prompt: 'How many cards should the deck turn over at a time?',
       choices: [
         { value: 1, label: 'Draw 1', sub: 'Relaxed', icon: fanIcon(1) },

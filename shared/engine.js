@@ -85,8 +85,9 @@ window.Solitaire = (() => {
   // and optionally: nextAuto() returning a step function, autoStep, afterDealWait,
   //   press(id, loc), afterRender(), updateHud(), onKey(key, e), wire(),
   //   settingsDefaults, settingsHTML(), onSetting(key), maxWidth,
-  //   dealOptions              { key, prompt, choices: [{ value, label, sub, icon? }] }: a choice
-  //                            offered at every new deal, kept in G.settings[key].
+  //   dealOptions              { key, title, prompt, choices: [{ value, label, sub, icon? }] }: a
+  //                            choice asked once on the first visit, then changed in Settings;
+  //                            kept in G.settings[key] and read by freshState() at each deal.
   function createGame(game) {
     const $ = sel => document.querySelector(sel);
     const board = $('#board');
@@ -119,6 +120,8 @@ window.Solitaire = (() => {
     let dropEl = null;
     let winTimers = [];
     let autoTimer = null;
+    let mustChoose = false;  // the first-visit deal picker is up and can't be dismissed
+    let onChosen = null;
     const clock = { acc: 0, since: null };
 
     // ---------- Storage ----------
@@ -598,31 +601,56 @@ window.Solitaire = (() => {
       openModal(`
         <button class="close-x" data-action="close" aria-label="Close">✕</button>
         <h2>Settings</h2>
+        ${game.dealOptions ? dealSetting() : ''}
         ${game.settingsHTML()}
         <div class="row"><button class="btn gold" data-action="close">Done</button></div>`);
     }
 
-    // The buttons for a game's deal options, with the last one dealt marked.
-    function dealPicker() {
+    // The buttons for a game's deal options. `action` is what a pick does; `mark` flags the current one.
+    function dealPicker(action, mark = true) {
       const { key, choices } = game.dealOptions;
       return `<div class="deal-options">${choices.map((c, i) => `
-        <button class="deal-opt${c.value === G.settings[key] ? ' current' : ''}" data-action="deal" data-choice="${i}">
+        <button class="deal-opt${mark && c.value === G.settings[key] ? ' current' : ''}" data-action="${action}" data-choice="${i}">
           ${c.icon || ''}<b>${c.label}</b><small>${c.sub}</small>
         </button>`).join('')}</div>`;
     }
 
-    function newGame(force = false) {
-      const inProgress = !G.meta.won && G.state.moves > 0;
-      if (game.dealOptions) {
-        // Every new deal starts by picking an option; the picker doubles as the confirmation.
-        openModal(`
-          <button class="close-x" data-action="close" aria-label="Close">✕</button>
-          <h2>New game</h2>
-          <p class="sub">${game.dealOptions.prompt}${inProgress ? ' The current game will be abandoned.' : ''}</p>
-          ${dealPicker()}
-          <div class="row"><button class="btn" data-action="close">${inProgress ? 'Keep playing' : 'Cancel'}</button></div>`);
+    // The deal option as a Settings entry. An untouched deal is redealt at once; otherwise the
+    // change waits for the next deal so a game in progress keeps its rules.
+    function dealSetting() {
+      const later = G.state.moves > 0;
+      return `<div class="deal-setting">
+        <b>${game.dealOptions.title}</b>
+        <small>${later ? 'Takes effect from your next deal.' : 'Changing it deals a fresh game.'}</small>
+        ${dealPicker('set-option')}
+      </div>`;
+    }
+
+    function setDealOption(choice) {
+      const { key, choices } = game.dealOptions;
+      if (G.settings[key] === choices[choice].value) return;
+      G.settings[key] = choices[choice].value;
+      saveSettings();
+      if (G.state.moves === 0) {
+        deal();
         return;
       }
+      modal.querySelectorAll('.deal-setting .deal-opt').forEach((b, i) => b.classList.toggle('current', i === choice));
+    }
+
+    // First visit to a game with deal options: ask before the first deal. The only way out is
+    // to pick, since the board has nothing on it until then.
+    function askDealOption(then) {
+      mustChoose = true;
+      onChosen = then;
+      openModal(`
+        <h2>Welcome</h2>
+        <p class="sub">${game.dealOptions.prompt} You can change this any time in Settings.</p>
+        ${dealPicker('deal', false)}`);
+    }
+
+    function newGame(force = false) {
+      const inProgress = !G.meta.won && G.state.moves > 0;
       if (!force && inProgress) {
         openModal(`
           <h2>New game?</h2>
@@ -641,6 +669,7 @@ window.Solitaire = (() => {
         G.settings[game.dealOptions.key] = game.dealOptions.choices[choice].value;
         saveSettings();
       }
+      mustChoose = false;
       if (modalOpen()) closeModal();
       winTimers.forEach(clearTimeout);
       winTimers = [];
@@ -655,6 +684,10 @@ window.Solitaire = (() => {
       dealAnimation();
       updateHud();
       save();
+      if (onChosen) {
+        onChosen();
+        onChosen = null;
+      }
     }
 
     modal.addEventListener('click', e => {
@@ -662,7 +695,8 @@ window.Solitaire = (() => {
       if (action === 'close') closeModal();
       else if (action === 'new-force') deal();
       else if (action === 'deal') deal(+e.target.closest('[data-choice]').dataset.choice);
-      else if (e.target === modal) closeModal();
+      else if (action === 'set-option') setDealOption(+e.target.closest('[data-choice]').dataset.choice);
+      else if (e.target === modal && !mustChoose) closeModal();
     });
 
     modal.addEventListener('change', e => {
@@ -685,7 +719,7 @@ window.Solitaire = (() => {
 
       document.addEventListener('keydown', e => {
         if (e.key === 'Escape' && modalOpen()) {
-          closeModal();
+          if (!mustChoose) closeModal();
           return;
         }
         if (modalOpen() || e.altKey || e.metaKey) return;
@@ -716,7 +750,8 @@ window.Solitaire = (() => {
 
     function start() {
       G.stats = Object.assign({ wins: 0, played: 0, best: null }, load(KEYS.stats, {}));
-      G.settings = Object.assign({}, game.settingsDefaults, load(KEYS.settings, {}));
+      const storedSettings = load(KEYS.settings, {});
+      G.settings = Object.assign({}, game.settingsDefaults, storedSettings);
       build();
       layout();
       wire();
@@ -735,8 +770,12 @@ window.Solitaire = (() => {
       } else {
         G.state = game.freshState();
         G.meta = { counted: false, won: false, elapsed: 0 };
-        deal();
-        if (!G.stats.played) setTimeout(showRules, 1600);
+        const welcome = () => { if (!G.stats.played) setTimeout(showRules, 1600); };
+        if (game.dealOptions && !(game.dealOptions.key in storedSettings)) askDealOption(welcome);
+        else {
+          deal();
+          welcome();
+        }
       }
       setInterval(() => { $('#time').textContent = fmtTime(elapsed()); }, 1000);
     }
