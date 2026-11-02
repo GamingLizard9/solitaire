@@ -19,7 +19,7 @@
   const SUIT_PATHS = [
     '<path d="M50 4C80 28 96 44 96 62C96 76 86 84 74 84C64 84 56 79 52 72C53 82 57 90 64 96H36C43 90 47 82 48 72C44 79 36 84 26 84C14 84 4 76 4 62C4 44 20 28 50 4Z"/>',
     '<path d="M50 92C22 71 8 55 8 36C8 20 18 10 31 10C40 10 47 16 50 24C53 16 60 10 69 10C82 10 92 20 92 36C92 55 78 71 50 92Z"/>',
-    '<circle cx="50" cy="27" r="21"/><circle cx="26" cy="58" r="21"/><circle cx="74" cy="58" r="21"/><path d="M45 50C45 74 40 88 31 96H69C60 88 55 74 55 50Z"/>',
+    '<circle cx="50" cy="27" r="21"/><circle cx="26" cy="58" r="21"/><circle cx="74" cy="58" r="21"/><circle cx="50" cy="46" r="8"/><path d="M45 50C45 74 40 88 31 96H69C60 88 55 74 55 50Z"/>',
     '<path d="M50 4L88 50L50 96L12 50Z"/>',
   ];
   const SUIT_NUDGE = [-4, 4, -1, 0]; // optical vertical offset, in viewBox units
