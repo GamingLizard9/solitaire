@@ -1,0 +1,160 @@
+/* Quartet: midnight-blue felt and copper. The shared table styles live in ../shared/table.css. */
+
+:root {
+  --felt-1: #22406e;
+  --felt-2: #0f1f3d;
+  --felt-3: #060c1c;
+  --accent: #d98b5f;
+  --accent-light: #f2c4a4;
+  --accent-rgb: 217, 139, 95;
+  --accent-line: rgba(176, 102, 62, 0.55);
+  --btn-1: #f3bf98;
+  --btn-2: #b8653c;
+  --btn-1-hover: #f9d0b0;
+  --btn-2-hover: #c97548;
+  --btn-ink: #1c0e06;
+  --btn-glow-rgb: 243, 191, 152;
+  --face-1: #fffefb;
+  --face-2: #f3f1ea;
+  --face-3: #e1dccf;
+  --red: #c8363f;
+  --ink: #1a2238;
+  --mint: #86d7ff;
+  --mint-rgb: 134, 215, 255;
+  --mint-light: #dff4ff;
+  --hint-rgb: 255, 190, 140;
+  --hint-light: #ffe6d2;
+  --text: #ece6dc;
+  --locked-shade: rgba(6, 14, 34, 0.5);
+  --toast-bg: rgba(10, 20, 42, 0.94);
+  --modal-bg: rgba(3, 7, 18, 0.62);
+  --panel-1: #1c3561;
+  --panel-2: #0c1834;
+  --panel-rim: rgba(12, 24, 52, 0.9);
+  --back: #15274b;
+  --confetti: #f2c4a4 #d98b5f #c8363f #fdfcf8 #86d7ff;
+}
+
+/* ---------- Top row: goal trackers either side of the free cell ---------- */
+
+.slot.free {
+  border: 1.5px solid rgba(var(--mint-rgb), 0.55);
+  background: rgba(var(--mint-rgb), 0.06);
+  color: rgba(var(--mint-rgb), 0.85);
+}
+.slot.free .free-label {
+  font: 600 calc(var(--cw) * 0.12)/1.35 'Outfit', sans-serif;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  text-align: center;
+}
+
+.slot.goal {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: calc(var(--cw) * 0.12);
+  border-style: dotted;
+  border-color: rgba(var(--accent-rgb), 0.16);
+  background: transparent;
+}
+.goal-label {
+  font: 600 calc(var(--cw) * 0.1)/1 'Outfit', sans-serif;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: rgba(var(--accent-rgb), 0.45);
+}
+.goal-items { display: flex; gap: calc(var(--cw) * 0.14); align-items: center; }
+.goal-items i {
+  display: grid;
+  place-items: center;
+  font-size: calc(var(--cw) * 0.34);
+  color: var(--accent);
+  opacity: 0.25;
+  transition: opacity 0.4s, color 0.4s, filter 0.4s;
+}
+.goal-items i.on { opacity: 1; color: var(--accent-light); filter: drop-shadow(0 0 6px rgba(var(--accent-rgb), 0.8)); }
+
+/* A run marker: five little bars stepping down, like a 10-to-6 run. */
+.goal-items i.run {
+  display: flex;
+  align-items: flex-end;
+  gap: calc(var(--cw) * 0.025);
+  height: calc(var(--cw) * 0.3);
+}
+.goal-items i.run b { width: calc(var(--cw) * 0.05); background: currentColor; border-radius: 1px; }
+.goal-items i.run b:nth-child(1) { height: 100%; }
+.goal-items i.run b:nth-child(2) { height: 84%; }
+.goal-items i.run b:nth-child(3) { height: 68%; }
+.goal-items i.run b:nth-child(4) { height: 52%; }
+.goal-items i.run b:nth-child(5) { height: 36%; }
+
+/* ---------- Card faces: unranked suit cards ---------- */
+
+.idx.suit-only { justify-content: flex-start; }
+.idx.suit-only .s { font-size: calc(var(--cw) * 0.22); }
+
+.crest {
+  border: 1.5px solid var(--accent);
+  border-radius: calc(var(--cw) * 0.05);
+  background:
+    repeating-linear-gradient(45deg, rgba(var(--accent-rgb), 0.16) 0 1px, transparent 1px 6px),
+    repeating-linear-gradient(-45deg, rgba(var(--accent-rgb), 0.16) 0 1px, transparent 1px 6px),
+    linear-gradient(#fffaf4, #efe5da);
+  box-shadow: inset 0 0 0 2px rgba(255, 252, 246, 0.9), inset 0 0 0 3px var(--accent-line);
+}
+.crest span {
+  font-size: calc(var(--cw) * 0.5);
+  line-height: 1;
+  filter: drop-shadow(0 1px 0 rgba(255, 255, 255, 0.8));
+}
+
+/* ---------- Card back: copper sunburst with a ringed medallion ---------- */
+
+.back {
+  background-color: var(--back);
+  background-image:
+    radial-gradient(circle at 50% 50%, transparent 0 30%, rgba(6, 12, 28, 0.55) 75%),
+    repeating-conic-gradient(from 0deg at 50% 50%, rgba(var(--accent-rgb), 0.2) 0 5deg, transparent 5deg 12deg);
+  border: 1px solid rgba(0, 0, 0, 0.45);
+  box-shadow:
+    inset 0 0 0 calc(var(--cw) * 0.04) var(--back),
+    inset 0 0 0 calc(var(--cw) * 0.05) var(--accent),
+    inset 0 0 0 calc(var(--cw) * 0.075) var(--back),
+    inset 0 0 0 calc(var(--cw) * 0.082) rgba(var(--accent-rgb), 0.5),
+    0 1px 2px rgba(0, 0, 0, 0.35), 0 3px 8px rgba(0, 0, 0, 0.2);
+}
+.back::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: calc(var(--cw) * 0.36);
+  height: calc(var(--cw) * 0.36);
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  border: 2px solid var(--accent);
+  background: radial-gradient(circle, var(--accent) 0 14%, var(--back) 15% 52%, rgba(var(--accent-rgb), 0.6) 53% 58%, var(--back) 59%);
+  box-shadow: 0 0 0 4px var(--back), 0 0 0 5px rgba(var(--accent-rgb), 0.4);
+}
+
+/* The top card of a sealed pile shows the suit in its medallion. */
+.back .seal {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: none;
+  place-items: center;
+  font-size: calc(var(--cw) * 0.2);
+  color: var(--accent-light);
+}
+.card.sealed-top .back .seal { display: grid; }
+.card.sealed-top .back::after { background: var(--back); }
+.card.sealed-top .back {
+  box-shadow:
+    inset 0 0 0 calc(var(--cw) * 0.04) var(--back),
+    inset 0 0 0 calc(var(--cw) * 0.05) var(--accent),
+    inset 0 0 0 calc(var(--cw) * 0.075) var(--back),
+    inset 0 0 0 calc(var(--cw) * 0.082) rgba(var(--accent-rgb), 0.5),
+    0 0 0 2px rgba(var(--accent-rgb), 0.55), 0 0 18px 2px rgba(var(--accent-rgb), 0.45);
+}

@@ -1,0 +1,719 @@
+// Shared table engine for every game on the site. It owns everything that works the same way
+// from game to game: state and undo history, saving, the clock and stats, rendering cards and
+// turning them over, drag-and-drop and tap-to-move, hints, toasts, modals and the win sequence.
+// A game describes its deck, layout and rules in the definition it passes to createGame().
+window.Solitaire = (() => {
+  'use strict';
+
+  // ---------- Card data ----------
+
+  const SUITS = [
+    { sym: '♠', color: 'black', name: 'Spades' },
+    { sym: '♥', color: 'red', name: 'Hearts' },
+    { sym: '♣', color: 'black', name: 'Clubs' },
+    { sym: '♦', color: 'red', name: 'Diamonds' },
+  ];
+  const TEXT_STYLE = '︎'; // keep suit glyphs from rendering as emoji
+
+  // Suits are drawn as SVG on a 100×100 box rather than font glyphs, whose vertical
+  // placement varies by system font. Each shape is nudged so its visual weight, not
+  // its bounding box, sits at the centre: the heart's mass is up in its lobes, the
+  // spade's is down in its base.
+  const SUIT_PATHS = [
+    '<path d="M50 4C80 28 96 44 96 62C96 76 86 84 74 84C64 84 56 79 52 72C53 82 57 90 64 96H36C43 90 47 82 48 72C44 79 36 84 26 84C14 84 4 76 4 62C4 44 20 28 50 4Z"/>',
+    '<path d="M50 92C22 71 8 55 8 36C8 20 18 10 31 10C40 10 47 16 50 24C53 16 60 10 69 10C82 10 92 20 92 36C92 55 78 71 50 92Z"/>',
+    '<circle cx="50" cy="27" r="21"/><circle cx="26" cy="58" r="21"/><circle cx="74" cy="58" r="21"/><circle cx="50" cy="46" r="8"/><path d="M45 50C45 74 40 88 31 96H69C60 88 55 74 55 50Z"/>',
+    '<path d="M50 4L88 50L50 96L12 50Z"/>',
+  ];
+  const SUIT_NUDGE = [-4, 4, -1, 0]; // optical vertical offset, in viewBox units
+  const suitSVG = s =>
+    `<svg class="suit-svg" viewBox="0 0 100 100" aria-hidden="true"><g transform="translate(0 ${SUIT_NUDGE[s]})">${SUIT_PATHS[s]}</g></svg>`;
+
+  // ---------- Small helpers ----------
+
+  const last = arr => arr[arr.length - 1];
+  const same = (a, b) => a.type === b.type && a.idx === b.idx;
+  const place = (el, x, y) => { el.style.transform = `translate(${x}px, ${y}px)`; };
+
+  function shuffle(a) {
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  }
+
+  function load(key, fallback) {
+    try {
+      const raw = localStorage.getItem(key);
+      return raw ? JSON.parse(raw) : fallback;
+    } catch {
+      return fallback;
+    }
+  }
+
+  function store(key, value) {
+    try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* storage unavailable */ }
+  }
+
+  function fmtTime(ms) {
+    const s = Math.floor(ms / 1000);
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const ss = String(s % 60).padStart(2, '0');
+    return h ? `${h}:${String(m).padStart(2, '0')}:${ss}` : `${m}:${ss}`;
+  }
+
+  const AUTO_STEP = 140; // default ms between automatic steps
+
+  // ---------- The game runner ----------
+
+  // `game` supplies:
+  //   id                       storage prefix
+  //   cards                    [{ id, color, ... }], indexed by id
+  //   cardLabel(c), faceHTML(c), backHTML?(c)
+  //   buildSlots()             create the empty spots with G.makeSlot()
+  //   layout(availW, availH)   set G.L ({ cw, ch, w, h, ... }) and place the slots
+  //   positions()              card id -> { x, y, z, down, key, locked }
+  //   freshState(), validState(s), isWon(), winOrder(), winText
+  //   locate(id), grab(loc), canDrop(ids, from, to), apply(s, from, ids, to)
+  //   dropZones()              [{ to, x, y, w, h }] for drag-and-drop
+  //   targetEl(to), clickTarget(from, ids)
+  //   findHints(), describe(hint)   hints carry { ids, to } and/or { el }
+  //   dealOrder(), dealFrom()  { x, y, key }
+  //   rulesHTML()
+  // and optionally: nextAuto() returning a step function, autoStep, afterDealWait,
+  //   press(id, loc), afterRender(), updateHud(), onKey(key, e), wire(),
+  //   settingsDefaults, settingsHTML(), onSetting(key), maxWidth.
+  function createGame(game) {
+    const $ = sel => document.querySelector(sel);
+    const board = $('#board');
+    const hud = $('#hud');
+    const modal = $('#modal');
+    const KEYS = {
+      game: `${game.id}.game.v1`,
+      stats: `${game.id}.stats.v1`,
+      settings: `${game.id}.settings.v1`,
+    };
+    const autoStep = game.autoStep || AUTO_STEP;
+
+    const G = {
+      state: null,   // the game's own state; always carries `moves`
+      history: [],   // JSON snapshots of previous states, for undo
+      meta: null,    // { counted, won, elapsed } — per-game bookkeeping that undo doesn't touch
+      stats: null,   // { wins, played, best }
+      settings: null,
+      L: {},         // layout metrics
+      P: {},         // card id -> position
+      els: [],
+      slots: {},
+      board,
+      busy: false,
+    };
+
+    let drag = null;
+    let hintTimer = null;
+    let hintIndex = 0;
+    let dropEl = null;
+    let winTimers = [];
+    let autoTimer = null;
+    const clock = { acc: 0, since: null };
+
+    // ---------- Storage ----------
+
+    function save() {
+      G.meta.elapsed = elapsed();
+      store(KEYS.game, { state: G.state, history: G.history.slice(-300), meta: G.meta });
+    }
+
+    const saveStats = () => store(KEYS.stats, G.stats);
+    const saveSettings = () => store(KEYS.settings, G.settings);
+
+    // ---------- Actions ----------
+
+    function snapshot() {
+      G.history.push(JSON.stringify(G.state));
+      if (G.history.length > 400) G.history.shift();
+    }
+
+    function move(from, ids, to) {
+      snapshot();
+      game.apply(G.state, from, ids, to);
+      G.state.moves++;
+      committed();
+    }
+
+    function undo() {
+      if (G.busy || G.meta.won) return;
+      if (!G.history.length) {
+        toast('Nothing to undo');
+        return;
+      }
+      G.state = JSON.parse(G.history.pop());
+      committed(true);
+    }
+
+    // `auto` marks an automatic step: it rides on the previous move's undo snapshot and isn't
+    // counted, so one Undo takes back a move together with whatever followed from it.
+    function committed(isUndo = false, auto = false, autoWait = autoStep) {
+      hintIndex = 0;
+      clearHint();
+      if (!isUndo && !auto) {
+        if (!G.meta.counted) {
+          G.meta.counted = true;
+          G.stats.played++;
+          saveStats();
+        }
+        if (clock.since === null) clock.since = Date.now();
+      }
+      render();
+      updateHud();
+      checkWin();
+      save();
+      if (!isUndo) autoPlay(autoWait);
+    }
+
+    // Click / tap: send the card (and its run) to the best legal spot.
+    function clickMove(from, ids) {
+      const to = game.clickTarget(from, ids);
+      if (to) move(from, ids, to);
+      else shake(ids);
+    }
+
+    // ---------- Automatic steps ----------
+
+    // game.nextAuto() returns a function that makes the next automatic step, or null.
+    function autoPlay(wait = autoStep) {
+      if (!game.nextAuto || G.busy || G.meta.won || autoTimer) return;
+      if (!game.nextAuto()) return;
+      G.busy = true;
+      autoTimer = setTimeout(() => {
+        autoTimer = null;
+        G.busy = false;
+        const step = !G.meta.won && game.nextAuto();
+        if (!step) return;
+        step();
+        committed(false, true); // chains into the next step, if any
+      }, wait);
+    }
+
+    function stopAutoPlay() {
+      if (!autoTimer) return;
+      clearTimeout(autoTimer);
+      autoTimer = null;
+      G.busy = false;
+    }
+
+    // ---------- Hints ----------
+
+    function showHint() {
+      if (G.busy || G.meta.won) return;
+      clearHint();
+      const hints = game.findHints();
+      if (!hints.length) {
+        toast('No moves left — try Undo or deal a new game');
+        return;
+      }
+      const h = hints[hintIndex % hints.length];
+      hintIndex++;
+      if (h.el) h.el.classList.add('hint');
+      if (h.ids) h.ids.forEach(id => G.els[id].classList.add('hint'));
+      if (h.to) game.targetEl(h.to).classList.add('hint-target');
+      toast(game.describe(h) + (hints.length > 1 ? '  ·  press again for another' : ''));
+      hintTimer = setTimeout(clearHint, 2600);
+    }
+
+    function clearHint() {
+      clearTimeout(hintTimer);
+      board.querySelectorAll('.hint, .hint-target').forEach(el => el.classList.remove('hint', 'hint-target'));
+    }
+
+    // ---------- Layout & rendering ----------
+
+    function layout() {
+      const hudH = hud.getBoundingClientRect().height;
+      // Measure the body rather than the window so phone safe-area padding is respected.
+      const availW = Math.min(document.body.clientWidth - 32, game.maxWidth || 1180);
+      const availH = document.body.clientHeight - hudH - 12;
+      game.layout(availW, availH);
+      board.style.width = G.L.w + 'px';
+      board.style.height = G.L.h + 'px';
+      board.style.setProperty('--cw', G.L.cw + 'px');
+      board.style.setProperty('--ch', G.L.ch + 'px');
+    }
+
+    function setCardZ(el, z, boostFor) {
+      el._z = z;
+      if (boostFor) {
+        el.style.zIndex = 3000 + z;
+        clearTimeout(el._zt);
+        el._zt = setTimeout(() => { el.style.zIndex = el._z; el._zt = null; }, boostFor);
+      } else if (!el._zt) {
+        el.style.zIndex = z;
+      }
+    }
+
+    // Cards rest as flat 2D layers (3D layers can show seam lines in Chrome). A card that
+    // turns over is switched into 3D mode at its current side first, then flipped, and
+    // flattened again once the turn is done.
+    function prepareFlips(flips) {
+      if (!flips.length) return;
+      for (const { el } of flips) {
+        el.firstChild.style.transition = 'none';
+        el.classList.add('flip3d');
+      }
+      void board.offsetWidth;
+      for (const { el, down, delay } of flips) {
+        el.firstChild.style.transition = '';
+        el.classList.toggle('down', down);
+        clearTimeout(el._ft);
+        el._ft = setTimeout(() => el.classList.remove('flip3d'), 2000 + delay); // backstop for the transitionend below
+      }
+    }
+
+    board.addEventListener('transitionend', e => {
+      if (e.propertyName !== 'transform' || !e.target.classList.contains('inner')) return;
+      const el = e.target.parentElement;
+      clearTimeout(el._ft);
+      el.classList.remove('flip3d');
+    });
+
+    function render({ instant = false, stagger = null, boost = null } = {}) {
+      G.P = game.positions();
+      if (instant) board.classList.add('no-anim');
+      const flips = [];
+      for (const c of game.cards) {
+        const el = G.els[c.id];
+        const p = G.P[c.id];
+        const delay = stagger ? (stagger[c.id] || 0) : 0;
+        el.style.transitionDelay = el.firstChild.style.transitionDelay = delay ? delay + 'ms' : '';
+        el.style.transform = `translate(${p.x}px, ${p.y}px)`;
+        if (instant || el.classList.contains('down') === p.down) el.classList.toggle('down', p.down);
+        else flips.push({ el, down: p.down, delay });
+        el.classList.toggle('locked', !!p.locked);
+        const moved = el._key !== p.key || (boost && boost.has(c.id)) || delay;
+        if (instant) {
+          clearTimeout(el._zt);
+          el._zt = null;
+          setCardZ(el, p.z, 0);
+        } else {
+          setCardZ(el, p.z, moved ? 420 + delay : 0);
+        }
+        el._key = p.key;
+      }
+      prepareFlips(flips);
+      if (game.afterRender) game.afterRender();
+
+      if (instant) {
+        void board.offsetWidth;
+        board.classList.remove('no-anim');
+      }
+    }
+
+    function dealAnimation() {
+      G.busy = true;
+      const from = game.dealFrom();
+      board.classList.add('no-anim');
+      for (const c of game.cards) {
+        const el = G.els[c.id];
+        el.style.transition = '';
+        el.style.transform = `translate(${from.x}px, ${from.y}px)`;
+        el.classList.add('down');
+        el.classList.remove('flip3d');
+        clearTimeout(el._ft);
+        clearTimeout(el._zt);
+        el._zt = null;
+        el.style.zIndex = 10 + c.id;
+        el._key = from.key;
+      }
+      void board.offsetWidth;
+      board.classList.remove('no-anim');
+
+      const stagger = {};
+      const order = game.dealOrder();
+      order.forEach((id, k) => { stagger[id] = 120 + k * 42; });
+      render({ stagger });
+      setTimeout(() => {
+        for (const c of game.cards) G.els[c.id].style.transitionDelay = G.els[c.id].firstChild.style.transitionDelay = '';
+        G.busy = false;
+        autoPlay(game.afterDealWait); // the deal's flips have finished by now
+      }, 120 + order.length * 42 + 520);
+    }
+
+    // ---------- Building the DOM ----------
+
+    function makeSlot(cls, html = '') {
+      const el = document.createElement('div');
+      el.className = 'slot ' + cls;
+      el.innerHTML = html;
+      board.appendChild(el);
+      return el;
+    }
+
+    function build() {
+      game.buildSlots();
+      for (const c of game.cards) {
+        const el = document.createElement('div');
+        el.className = `card ${c.color} down`;
+        el.dataset.id = c.id;
+        el.setAttribute('aria-label', game.cardLabel(c));
+        const back = game.backHTML ? game.backHTML(c) : '';
+        el.innerHTML = `<div class="inner"><div class="face">${game.faceHTML(c)}</div><div class="back">${back}</div></div>`;
+        board.appendChild(el);
+        G.els[c.id] = el;
+      }
+    }
+
+    // ---------- Pointer input ----------
+
+    function overlap(a, b) {
+      const w = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x);
+      const h = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y);
+      return w > 0 && h > 0 ? w * h : 0;
+    }
+
+    function findTarget(d) {
+      const r = { x: d.base[0].x + d.dx, y: d.base[0].y + d.dy, w: G.L.cw, h: G.L.ch };
+      let best = null;
+      let bestArea = 0;
+      for (const zone of game.dropZones()) {
+        if (!game.canDrop(d.ids, d.from, zone.to)) continue;
+        const a = overlap(r, zone);
+        if (a > bestArea) { bestArea = a; best = zone.to; }
+      }
+      return best;
+    }
+
+    function setDropHighlight(to) {
+      const el = to ? game.targetEl(to) : null;
+      if (el === dropEl) return;
+      if (dropEl) dropEl.classList.remove('drop-ok');
+      dropEl = el;
+      if (el) el.classList.add('drop-ok');
+    }
+
+    board.addEventListener('pointerdown', e => {
+      if (G.busy || G.meta.won || drag || e.button > 0) return;
+      const el = e.target.closest('.card');
+      if (!el) return;
+      const id = +el.dataset.id;
+      const loc = game.locate(id);
+      if (game.press && game.press(id, loc)) return;
+      const ids = game.grab(loc);
+      if (!ids) {
+        shake([id]);
+        return;
+      }
+      e.preventDefault();
+      drag = {
+        pointer: e.pointerId, ids, from: loc,
+        sx: e.clientX, sy: e.clientY, dx: 0, dy: 0, moved: false,
+        base: ids.map(i => ({ x: G.P[i].x, y: G.P[i].y })),
+      };
+      board.setPointerCapture(e.pointerId);
+    });
+
+    board.addEventListener('pointermove', e => {
+      if (!drag || e.pointerId !== drag.pointer) return;
+      const dx = e.clientX - drag.sx;
+      const dy = e.clientY - drag.sy;
+      if (!drag.moved) {
+        if (Math.hypot(dx, dy) < 6) return;
+        drag.moved = true;
+        clearHint();
+        drag.ids.forEach((id, k) => {
+          const el = G.els[id];
+          el.classList.add('dragging');
+          clearTimeout(el._zt);
+          el._zt = null;
+          el.style.zIndex = 5000 + k;
+        });
+      }
+      drag.dx = dx;
+      drag.dy = dy;
+      drag.ids.forEach((id, k) => {
+        G.els[id].style.transform = `translate(${Math.round(drag.base[k].x + dx)}px, ${Math.round(drag.base[k].y + dy)}px)`;
+      });
+      setDropHighlight(findTarget(drag));
+    });
+
+    function endDrag(e, cancelled) {
+      if (!drag || e.pointerId !== drag.pointer) return;
+      const d = drag;
+      drag = null;
+      d.ids.forEach(id => G.els[id].classList.remove('dragging'));
+      setDropHighlight(null);
+      if (!d.moved) {
+        if (!cancelled) clickMove(d.from, d.ids);
+        return;
+      }
+      const to = cancelled ? null : findTarget(d);
+      if (to) move(d.from, d.ids, to);
+      else render({ boost: new Set(d.ids) });
+    }
+
+    board.addEventListener('pointerup', e => endDrag(e, false));
+    board.addEventListener('pointercancel', e => endDrag(e, true));
+
+    // ---------- Feedback ----------
+
+    function shake(ids) {
+      ids.forEach(id => {
+        const el = G.els[id];
+        el.classList.remove('shake');
+        void el.offsetWidth;
+        el.classList.add('shake');
+        setTimeout(() => el.classList.remove('shake'), 400);
+      });
+    }
+
+    function bump(el) {
+      el.classList.remove('bump');
+      void el.offsetWidth;
+      el.classList.add('bump');
+    }
+
+    let toastTimer = null;
+    function toast(msg) {
+      const t = $('#toast');
+      t.textContent = msg;
+      t.classList.add('show');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => t.classList.remove('show'), 2600);
+    }
+
+    // ---------- HUD & clock ----------
+
+    function elapsed() {
+      return clock.acc + (clock.since === null ? 0 : Date.now() - clock.since);
+    }
+
+    function updateHud() {
+      $('#wins').textContent = G.stats.wins;
+      $('#moves').textContent = G.state.moves;
+      $('#time').textContent = fmtTime(elapsed());
+      $('#btn-undo').disabled = !G.history.length || G.meta.won;
+      if (game.updateHud) game.updateHud();
+    }
+
+    // ---------- Winning ----------
+
+    function checkWin() {
+      if (G.meta.won || !game.isWon()) return;
+      G.meta.won = true;
+      clock.acc = elapsed();
+      clock.since = null;
+      G.stats.wins++;
+      if (!G.stats.best || clock.acc < G.stats.best) G.stats.best = clock.acc;
+      saveStats();
+      updateHud();
+      bump($('#wins'));
+      celebrate();
+    }
+
+    function celebrate() {
+      G.busy = true;
+      clearHint();
+      winTimers.push(setTimeout(() => {
+        game.winOrder().forEach((id, i) => {
+          const el = G.els[id];
+          const x = Math.random() * (G.L.w - G.L.cw);
+          const y = Math.random() * (G.L.h - G.L.ch);
+          const rot = (Math.random() - 0.5) * 90;
+          el.style.transition = `transform 1.1s cubic-bezier(.2,.8,.2,1) ${i * 26}ms`;
+          el.style.transform = `translate3d(${x}px, ${y}px, 0) rotate(${rot}deg)`;
+          clearTimeout(el._zt);
+          el._zt = null;
+          el.style.zIndex = 3000 + i;
+        });
+        winTimers.push(setTimeout(showWinModal, 1500));
+      }, 450));
+    }
+
+    function showWinModal() {
+      openModal(`
+        <div class="win-panel">
+          <h2>Victory</h2>
+          <p class="sub">${game.winText}</p>
+          <div class="win-stats">
+            <div><b>${G.state.moves}</b><span>Moves</span></div>
+            <div><b>${fmtTime(G.meta.elapsed || clock.acc)}</b><span>Time</span></div>
+            <div><b>${G.stats.wins}</b><span>Total wins</span></div>
+            <div><b>${G.stats.best ? fmtTime(G.stats.best) : '—'}</b><span>Best time</span></div>
+          </div>
+          <div class="row"><button class="btn gold" data-action="new-force">Deal again</button></div>
+        </div>`);
+      confetti();
+    }
+
+    function confetti() {
+      const css = getComputedStyle(document.documentElement);
+      const colors = (css.getPropertyValue('--confetti') || '#ecd396 #d4af5f #c4314b #fbf6ea #7ef0c5').trim().split(/\s+/);
+      for (let i = 0; i < 90; i++) {
+        const p = document.createElement('div');
+        p.className = 'confetti';
+        p.style.left = Math.random() * 100 + 'vw';
+        p.style.background = colors[i % colors.length];
+        p.style.animationDuration = 2.4 + Math.random() * 2.4 + 's';
+        p.style.animationDelay = Math.random() * 0.8 + 's';
+        p.style.setProperty('--dx', (Math.random() - 0.5) * 300 + 'px');
+        p.style.setProperty('--rot', (Math.random() - 0.5) * 1440 + 'deg');
+        if (i % 3 === 0) p.style.borderRadius = '50%';
+        document.body.appendChild(p);
+        setTimeout(() => p.remove(), 6000);
+      }
+    }
+
+    // ---------- Modals ----------
+
+    function openModal(html) {
+      modal.querySelector('.panel').innerHTML = html;
+      modal.classList.remove('hidden');
+      requestAnimationFrame(() => modal.classList.add('show'));
+    }
+
+    function closeModal() {
+      modal.classList.remove('show');
+      setTimeout(() => { if (!modal.classList.contains('show')) modal.classList.add('hidden'); }, 260);
+    }
+
+    const modalOpen = () => !modal.classList.contains('hidden');
+
+    function showRules() {
+      const { wins, played, best } = G.stats;
+      openModal(`
+        <button class="close-x" data-action="close" aria-label="Close">✕</button>
+        ${game.rulesHTML()}
+        <h3>Your record</h3>
+        <ul><li>${wins} win${wins === 1 ? '' : 's'} from ${played} game${played === 1 ? '' : 's'} played${best ? ` · best time ${fmtTime(best)}` : ''}.</li></ul>
+        <div class="row"><button class="btn gold" data-action="close">Let's play</button></div>`);
+    }
+
+    function showSettings() {
+      if (!game.settingsHTML) return;
+      openModal(`
+        <button class="close-x" data-action="close" aria-label="Close">✕</button>
+        <h2>Settings</h2>
+        ${game.settingsHTML()}
+        <div class="row"><button class="btn gold" data-action="close">Done</button></div>`);
+    }
+
+    function newGame(force = false) {
+      if (!force && !G.meta.won && G.state.moves > 0) {
+        openModal(`
+          <h2>New game?</h2>
+          <p class="sub">The current game will be abandoned.</p>
+          <div class="row">
+            <button class="btn" data-action="close">Keep playing</button>
+            <button class="btn gold" data-action="new-force">Deal new game</button>
+          </div>`);
+        return;
+      }
+      if (modalOpen()) closeModal();
+      winTimers.forEach(clearTimeout);
+      winTimers = [];
+      stopAutoPlay();
+      clearHint();
+      G.state = game.freshState();
+      G.history = [];
+      G.meta = { counted: false, won: false, elapsed: 0 };
+      clock.acc = 0;
+      clock.since = null;
+      hintIndex = 0;
+      dealAnimation();
+      updateHud();
+      save();
+    }
+
+    modal.addEventListener('click', e => {
+      const action = e.target.closest('[data-action]')?.dataset.action;
+      if (action === 'close') closeModal();
+      else if (action === 'new-force') newGame(true);
+      else if (e.target === modal) closeModal();
+    });
+
+    modal.addEventListener('change', e => {
+      const key = e.target.dataset.setting;
+      if (!key) return;
+      G.settings[key] = e.target.checked;
+      saveSettings();
+      if (game.onSetting) game.onSetting(key);
+    });
+
+    // ---------- Wiring ----------
+
+    function wire() {
+      $('#btn-new').addEventListener('click', () => newGame());
+      $('#btn-undo').addEventListener('click', undo);
+      $('#btn-hint').addEventListener('click', showHint);
+      $('#btn-rules').addEventListener('click', showRules);
+      $('#btn-settings')?.addEventListener('click', showSettings);
+      if (game.wire) game.wire();
+
+      document.addEventListener('keydown', e => {
+        if (e.key === 'Escape' && modalOpen()) {
+          closeModal();
+          return;
+        }
+        if (modalOpen() || e.altKey || e.metaKey) return;
+        const key = e.key.toLowerCase();
+        if (key === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
+        else if (e.ctrlKey) return;
+        else if (key === 'h') showHint();
+        else if (key === 'n') newGame();
+        else if (key === 'r') showRules();
+        else if (key === 's') showSettings();
+        else if (game.onKey) game.onKey(key, e);
+      });
+
+      let resizeTimer = null;
+      window.addEventListener('resize', () => {
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(() => {
+          layout();
+          if (!G.meta.won) render({ instant: true });
+        }, 80);
+      });
+
+      window.addEventListener('pagehide', save);
+      document.addEventListener('visibilitychange', () => { if (document.hidden) save(); });
+    }
+
+    // ---------- Start ----------
+
+    function start() {
+      G.stats = Object.assign({ wins: 0, played: 0, best: null }, load(KEYS.stats, {}));
+      G.settings = Object.assign({}, game.settingsDefaults, load(KEYS.settings, {}));
+      build();
+      layout();
+      wire();
+      const saved = load(KEYS.game, null);
+      let ok = false;
+      try { ok = !!(saved && saved.state && saved.meta && !saved.meta.won && game.validState(saved.state)); } catch { ok = false; }
+      if (ok) {
+        G.state = saved.state;
+        G.history = saved.history || [];
+        G.meta = saved.meta;
+        clock.acc = G.meta.elapsed || 0;
+        clock.since = G.meta.counted ? Date.now() : null;
+        render({ instant: true });
+        updateHud();
+        autoPlay();
+      } else {
+        G.state = game.freshState();
+        G.meta = { counted: false, won: false, elapsed: 0 };
+        newGame(true);
+        if (!G.stats.played) setTimeout(showRules, 1600);
+      }
+      setInterval(() => { $('#time').textContent = fmtTime(elapsed()); }, 1000);
+    }
+
+    Object.assign(G, {
+      makeSlot, move, snapshot, committed, render, updateHud, autoPlay, stopAutoPlay,
+      toast, shake, bump, start,
+    });
+    return G;
+  }
+
+  return { SUITS, TEXT_STYLE, suitSVG, last, same, place, shuffle, fmtTime, createGame };
+})();

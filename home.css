@@ -149,6 +149,30 @@ a.game:hover .mini:nth-child(3) { transform: translateX(5%) rotate(16deg); }
   border: 2px solid var(--gold);
 }
 
+/* Quartet's card keeps its own midnight-blue and copper look */
+.quartet { border-color: rgba(217, 139, 95, 0.4); }
+a.quartet:hover, a.quartet:focus-visible { border-color: #d98b5f; background: rgba(217, 139, 95, 0.08); }
+.quartet .preview {
+  border-bottom-color: rgba(217, 139, 95, 0.22);
+  background: radial-gradient(ellipse at 50% 30%, rgba(34, 64, 110, 0.95), rgba(15, 31, 61, 0.95));
+}
+.quartet .info h2 { color: #f2c4a4; }
+.quartet .play { background: linear-gradient(135deg, #f3bf98, #b8653c); color: #1c0e06; }
+.mini.crest i {
+  inset: 18px 12px;
+  display: grid;
+  place-items: center;
+  border: 1.5px solid #d98b5f;
+  border-radius: 4px;
+  font-size: 26px;
+}
+.quartet .mini.back {
+  background:
+    repeating-conic-gradient(from 0deg at 50% 50%, rgba(217, 139, 95, 0.3) 0 5deg, transparent 5deg 12deg),
+    #15274b;
+  border-color: #d98b5f;
+}
+
 .info { display: flex; flex-direction: column; flex: 1; padding: 18px 20px 20px; }
 
 .info h2 {
