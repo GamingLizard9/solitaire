@@ -311,7 +311,8 @@
       });
     });
 
-    // Long columns squeeze their fan to fit the table.
+    // Long columns squeeze their fan to fit the table. Buried cards are shaded, except the next
+    // card each foundation needs, so it's easy to spot what to dig out.
     const room = G.L.h - G.L.tabY - ch - 8;
     state.tableau.forEach((col, c) => {
       let off = ch * 0.27;
@@ -319,7 +320,7 @@
       let runStart = col.length - 1;
       while (runStart > 0 && fits(col[runStart], col[runStart - 1])) runStart--;
       col.forEach((id, i) => {
-        out[id] = { x: colX(c), y: Math.round(G.L.tabY + i * off), z: 400 + i, down: false, key: 't' + c, locked: i < runStart };
+        out[id] = { x: colX(c), y: Math.round(G.L.tabY + i * off), z: 400 + i, down: false, key: 't' + c, locked: i < runStart && !canFound(id, state) };
       });
     });
     return out;
