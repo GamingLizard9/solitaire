@@ -108,6 +108,39 @@
     else pileOf(to, s).push(...ids);
   }
 
+  // A run really moves one card at a time. Spell out those steps so the engine can play them:
+  // park all but the run's bottom card in free cells, move it, then bring the rest back down on
+  // top. A run too long for the cells alone goes in parts, with an empty column holding one part
+  // while the next goes across.
+  function moveSteps(from, ids, to) {
+    if (ids.length < 2) return null;
+    const s = JSON.parse(JSON.stringify(G.state));
+    const steps = [];
+    const tab = idx => ({ type: 'tableau', idx });
+    const step = (f, t) => {
+      steps.push({ from: f, ids: [last(pileOf(f, s))], to: t });
+      put(s, t, take(s, f, 1));
+    };
+    const shift = (n, src, dst, spare) => {
+      const cells = s.cells.map((id, i) => (id === null ? i : -1)).filter(i => i >= 0);
+      if (n <= cells.length + 1 || !spare.length) {
+        const used = cells.slice(0, n - 1);
+        used.forEach(i => step(tab(src), { type: 'cell', idx: i }));
+        step(tab(src), tab(dst));
+        used.reverse().forEach(i => step({ type: 'cell', idx: i, pos: 0 }, tab(dst)));
+        return;
+      }
+      const [via, ...rest] = spare;
+      const part = Math.min((cells.length + 1) * 2 ** rest.length, n - 1);
+      shift(part, src, via, rest);
+      shift(n - part, src, dst, rest);
+      shift(part, via, dst, rest);
+    };
+    const spare = s.tableau.map((col, c) => (!col.length && c !== to.idx ? c : -1)).filter(c => c >= 0);
+    shift(ids.length, from.idx, to.idx, spare);
+    return steps;
+  }
+
   // Click / tap: the best legal spot for the card (and its run): home, onto another column,
   // an empty column, then a free cell.
   function clickTarget(from, ids) {
@@ -442,6 +475,7 @@
     grab,
     canDrop,
     apply: (s, from, ids, to) => put(s, to, take(s, from, ids.length)),
+    moveSteps,
     dropZones,
     targetEl,
     clickTarget,

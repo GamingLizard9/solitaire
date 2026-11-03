@@ -65,6 +65,11 @@ window.Solitaire = (() => {
   }
 
   const AUTO_STEP = 140; // default ms between automatic steps
+  // ms between the steps of a move played out card by card: slow enough to follow, but a long
+  // run speeds up so the whole move takes about STEP_TOTAL.
+  const STEP_MIN = 90;
+  const STEP_MAX = 230;
+  const STEP_TOTAL = 2400;
 
   // ---------- The game runner ----------
 
@@ -84,6 +89,8 @@ window.Solitaire = (() => {
   //   rulesHTML()
   // and optionally: nextAuto() returning a step function, autoStep, afterDealWait,
   //   press(id, loc), afterRender(), updateHud(), onKey(key, e), wire(),
+  //   moveSteps(from, ids, to) [{ from, ids, to }]: a move to play out as these smaller moves,
+  //                            in order, so the player can see how it's done,
   //   settingsDefaults, settingsHTML(), onSetting(key), maxWidth,
   //   dealOptions              { key, title, prompt, choices: [{ value, label, sub, icon? }] }: a
   //                            choice asked once on the first visit, then changed in Settings;
@@ -143,9 +150,35 @@ window.Solitaire = (() => {
 
     function move(from, ids, to) {
       snapshot();
+      const steps = game.moveSteps && game.moveSteps(from, ids, to);
+      if (steps && steps.length > 1) {
+        playSteps(steps);
+        return;
+      }
       game.apply(G.state, from, ids, to);
       G.state.moves++;
       committed();
+    }
+
+    // Play a move out as the smaller moves it's made of, one after another. Together they count
+    // as a single move with a single undo.
+    function playSteps(steps) {
+      G.busy = true;
+      clearHint();
+      const wait = Math.max(STEP_MIN, Math.min(STEP_MAX, STEP_TOTAL / steps.length));
+      const next = k => {
+        const { from, ids, to } = steps[k];
+        game.apply(G.state, from, ids, to);
+        if (k < steps.length - 1) {
+          render();
+          setTimeout(() => next(k + 1), wait);
+          return;
+        }
+        G.busy = false;
+        G.state.moves++;
+        committed();
+      };
+      next(0);
     }
 
     function undo() {
