@@ -190,6 +190,23 @@ a.klondike:hover, a.klondike:focus-visible { border-color: #c3c9d4; background: 
   border-color: #c3c9d4;
 }
 
+/* FreeCell's card keeps its own aubergine and pearl look */
+.freecell { border-color: rgba(205, 184, 232, 0.4); }
+a.freecell:hover, a.freecell:focus-visible { border-color: #cdb8e8; background: rgba(205, 184, 232, 0.08); }
+.freecell .preview {
+  border-bottom-color: rgba(205, 184, 232, 0.22);
+  background: radial-gradient(ellipse at 50% 30%, rgba(79, 42, 99, 0.95), rgba(40, 19, 58, 0.95));
+}
+.freecell .info h2 { color: #ede3fb; }
+.freecell .play { background: linear-gradient(135deg, #ece0fc, #9a7cc4); color: #1a0e24; }
+.freecell .mini.back {
+  background:
+    repeating-linear-gradient(45deg, rgba(205, 184, 232, 0.35) 0 1px, transparent 1px 7px),
+    repeating-linear-gradient(-45deg, rgba(205, 184, 232, 0.35) 0 1px, transparent 1px 7px),
+    #3e1d55;
+  border-color: #cdb8e8;
+}
+
 .info { display: flex; flex-direction: column; flex: 1; padding: 18px 20px 20px; }
 
 .info h2 {

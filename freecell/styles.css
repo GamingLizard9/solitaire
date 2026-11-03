@@ -1,0 +1,115 @@
+/* FreeCell: aubergine felt and pearl. The shared table styles live in ../shared/table.css. */
+
+:root {
+  --felt-1: #4f2a63;
+  --felt-2: #28133a;
+  --felt-3: #10071a;
+  --accent: #cdb8e8;
+  --accent-light: #ede3fb;
+  --accent-rgb: 205, 184, 232;
+  --accent-line: rgba(138, 110, 178, 0.55);
+  --btn-1: #ece0fc;
+  --btn-2: #9a7cc4;
+  --btn-1-hover: #f6efff;
+  --btn-2-hover: #aa8dd2;
+  --btn-ink: #1a0e24;
+  --btn-glow-rgb: 233, 220, 251;
+  --face-1: #fffdfb;
+  --face-2: #f5f1f2;
+  --face-3: #e3dbe2;
+  --red: #c02c50;
+  --ink: #1e1a2e;
+  --mint: #8fe8c9;
+  --mint-rgb: 143, 232, 201;
+  --mint-light: #ddfff2;
+  --hint-rgb: 255, 214, 140;
+  --hint-light: #fff1cf;
+  --text: #f0e9f5;
+  --locked-shade: rgba(24, 10, 34, 0.45);
+  --toast-bg: rgba(32, 15, 44, 0.94);
+  --modal-bg: rgba(12, 4, 18, 0.62);
+  --panel-1: #43244f;
+  --panel-2: #200f2a;
+  --panel-rim: rgba(32, 15, 42, 0.9);
+  --back: #3e1d55;
+  --back-deep: #210d30;
+  --confetti: #ede3fb #cdb8e8 #c02c50 #fffdfb #8fe8c9;
+}
+
+/* ---------- Top row: free cells, foundations ---------- */
+
+.slot.cell {
+  border: 1.5px solid rgba(var(--accent-rgb), 0.32);
+  background: rgba(var(--accent-rgb), 0.05);
+}
+.slot.cell .cell-label {
+  font: 600 calc(var(--cw) * 0.11)/1.35 'Outfit', sans-serif;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  text-align: center;
+  color: rgba(var(--accent-rgb), 0.5);
+}
+
+/* Opaque color + opacity: translucent text color shows the glyph's overlapping contours */
+.slot.found span { color: var(--accent); opacity: 0.32; }
+.slot.found.red span { color: rgb(232, 120, 148); opacity: 0.42; }
+
+/* ---------- Card faces: aces and courts ---------- */
+
+/* Aces sit in a pearl ring, echoing the medallion on the back. */
+.ace::before {
+  content: '';
+  position: absolute;
+  width: 84%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  border: 1.5px solid var(--accent-line);
+  box-shadow: 0 0 0 3px rgba(255, 253, 251, 0.9), 0 0 0 4px rgba(var(--accent-rgb), 0.6);
+  background: radial-gradient(circle, rgba(var(--accent-rgb), 0.22), transparent 70%);
+}
+.ace span { z-index: 1; font-size: calc(var(--cw) * 0.5); line-height: 1; }
+
+.court {
+  flex-direction: column;
+  gap: calc(var(--cw) * 0.07); /* clears the descending tails of J and Q */
+  border: 1.5px solid var(--accent-line);
+  border-radius: calc(var(--cw) * 0.05);
+  background:
+    repeating-linear-gradient(90deg, rgba(var(--accent-rgb), 0.22) 0 1px, transparent 1px calc(var(--cw) * 0.07)),
+    linear-gradient(#fffdfb, #ece4ec);
+  box-shadow: inset 0 0 0 2px rgba(255, 253, 251, 0.9), inset 0 0 0 3px var(--accent-line);
+}
+.court .cl {
+  font: 800 calc(var(--cw) * 0.32)/1 'Playfair Display', Georgia, serif;
+  text-shadow: 0 0 6px #fffdfb, 0 0 2px #fffdfb;
+}
+.court .cs { font-size: calc(var(--cw) * 0.17); filter: drop-shadow(0 0 3px #fffdfb); }
+
+/* ---------- Card back: pearl lattice with a ringed medallion ---------- */
+
+.back {
+  background-color: var(--back);
+  background-image:
+    radial-gradient(ellipse at 50% 50%, transparent 0 30%, rgba(16, 6, 26, 0.55) 85%),
+    repeating-linear-gradient(45deg, rgba(var(--accent-rgb), 0.26) 0 1px, transparent 1px calc(var(--cw) * 0.1)),
+    repeating-linear-gradient(-45deg, rgba(var(--accent-rgb), 0.26) 0 1px, transparent 1px calc(var(--cw) * 0.1));
+  border: 1px solid rgba(0, 0, 0, 0.45);
+  box-shadow:
+    inset 0 0 0 calc(var(--cw) * 0.04) var(--back-deep),
+    inset 0 0 0 calc(var(--cw) * 0.052) var(--accent),
+    inset 0 0 0 calc(var(--cw) * 0.07) var(--back-deep),
+    0 1px 2px rgba(0, 0, 0, 0.35), 0 3px 8px rgba(0, 0, 0, 0.2);
+}
+.back::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: calc(var(--cw) * 0.34);
+  height: calc(var(--cw) * 0.34);
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  border: 2px solid var(--accent);
+  background: radial-gradient(circle, var(--accent-light) 0 14%, var(--back-deep) 15% 50%, rgba(var(--accent-rgb), 0.7) 51% 57%, var(--back-deep) 58%);
+  box-shadow: 0 0 0 4px var(--back-deep), 0 0 0 5px rgba(var(--accent-rgb), 0.4);
+}
