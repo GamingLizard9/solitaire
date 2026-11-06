@@ -56,7 +56,7 @@ function browser(date, table, storage) {
   // The site won't open a deal dated in the future, so this one's date has to be "today".
   vm.runInContext(`{
     const Real = Date;
-    const now = Real.parse('${date}T18:00:00Z'); // midday in US Central, where days turn over
+    const now = Real.parse('${date}T18:00:00Z'); // midday in US Eastern, where days turn over
     globalThis.Date = class extends Real {
       constructor(...args) { args.length ? super(...args) : super(now); }
       static now() { return now; }

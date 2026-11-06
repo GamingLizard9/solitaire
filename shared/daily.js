@@ -54,15 +54,15 @@ globalThis.Daily = (() => {
   const utc = date => new Date(date + 'T00:00:00Z');
   const format = (date, options) => utc(date).toLocaleDateString(undefined, { timeZone: 'UTC', ...options });
 
-  const CENTRAL = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Chicago', year: 'numeric', month: '2-digit', day: '2-digit' });
+  const EASTERN = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' });
 
-  // Days turn over at midnight US Central time for everyone, wherever they are. A clock set
+  // Days turn over at midnight on US Eastern clocks for everyone, wherever they are. A clock set
   // before the first day gets that day's deal.
   function today() {
     const part = {};
-    for (const { type, value } of CENTRAL.formatToParts(new Date())) part[type] = value;
-    const central = `${part.year}-${part.month}-${part.day}`;
-    return central < FIRST_DAY ? FIRST_DAY : central;
+    for (const { type, value } of EASTERN.formatToParts(new Date())) part[type] = value;
+    const eastern = `${part.year}-${part.month}-${part.day}`;
+    return eastern < FIRST_DAY ? FIRST_DAY : eastern;
   }
 
   const isPlayable = date =>
