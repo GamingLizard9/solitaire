@@ -47,7 +47,8 @@
     for (let row = 0; row < 7; row++) {
       for (let c = row; c < 7; c++) tableau[c].push(deck[k++]);
     }
-    const draw = DRAWS.includes(G.settings.draw) ? G.settings.draw : 1;
+    const chosen = G.daily ? G.daily.value : G.settings.draw;
+    const draw = DRAWS.includes(chosen) ? chosen : 1;
     return {
       stock: deck.slice(k), waste: [], foundations: [[], [], [], []],
       tableau, hidden: tableau.map(col => col.length - 1), draw, moves: 0,

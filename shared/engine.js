@@ -35,13 +35,9 @@ window.Solitaire = (() => {
   const same = (a, b) => a.type === b.type && a.idx === b.idx;
   const place = (el, x, y) => { el.style.transform = `translate(${x}px, ${y}px)`; };
 
-  function shuffle(a) {
-    for (let i = a.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [a[i], a[j]] = [a[j], a[i]];
-    }
-    return a;
-  }
+  // A daily deal swaps in its own source of randomness while its cards are shuffled.
+  let random = Math.random;
+  const shuffle = a => Daily.shuffle(a, random);
 
   function load(key, fallback) {
     try {
@@ -100,8 +96,9 @@ window.Solitaire = (() => {
     const board = $('#board');
     const hud = $('#hud');
     const modal = $('#modal');
+    const daily = Daily.forPage(game.id); // the daily deal this page was opened for, if any
     const KEYS = {
-      game: `${game.id}.game.v1`,
+      game: daily ? Daily.saveKey(daily) : `${game.id}.game.v1`,
       stats: `${game.id}.stats.v1`,
       settings: `${game.id}.settings.v1`,
     };
@@ -113,6 +110,7 @@ window.Solitaire = (() => {
       meta: null,    // { counted, won, elapsed } — per-game bookkeeping that undo doesn't touch
       stats: null,   // { wins, played, best }
       settings: null,
+      daily,
       L: {},         // layout metrics
       P: {},         // card id -> position
       els: [],
@@ -135,7 +133,20 @@ window.Solitaire = (() => {
 
     function save() {
       G.meta.elapsed = elapsed();
+      // A finished daily is over for good, and archive deals shouldn't pile up in storage.
+      if (daily && G.meta.won) {
+        try { localStorage.removeItem(KEYS.game); } catch { /* storage unavailable */ }
+        return;
+      }
       store(KEYS.game, { state: G.state, history: G.history.slice(-300), meta: G.meta });
+    }
+
+    // Shuffle with the daily deal's own randomness when there is one, so it always comes out the same.
+    function freshState() {
+      if (daily) random = daily.random();
+      const state = game.freshState();
+      random = Math.random;
+      return state;
     }
 
     const saveStats = () => store(KEYS.stats, G.stats);
@@ -249,7 +260,7 @@ window.Solitaire = (() => {
       clearHint();
       const hints = game.findHints();
       if (!hints.length) {
-        toast('No moves left — try Undo or deal a new game');
+        toast(`No moves left — try Undo or ${daily ? 'restart the deal' : 'deal a new game'}`);
         return;
       }
       const h = hints[hintIndex % hints.length];
@@ -544,6 +555,7 @@ window.Solitaire = (() => {
       G.stats.wins++;
       if (!G.stats.best || clock.acc < G.stats.best) G.stats.best = clock.acc;
       saveStats();
+      if (daily) Daily.markDone(daily.date, { moves: G.state.moves, time: clock.acc });
       updateHud();
       bump($('#wins'));
       celebrate();
@@ -569,13 +581,34 @@ window.Solitaire = (() => {
     }
 
     function showWinModal() {
+      const moves = `<div><b>${G.state.moves}</b><span>Moves</span></div>`;
+      const time = `<div><b>${fmtTime(G.meta.elapsed || clock.acc)}</b><span>Time</span></div>`;
+      if (daily) {
+        const total = Daily.count();
+        openModal(`
+          <div class="win-panel">
+            <h2>Daily Deal complete</h2>
+            <p class="sub">${Daily.format(daily.date, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</p>
+            <div class="win-stats">
+              ${moves}
+              ${time}
+              <div><b>${total}</b><span>Daily deal${total === 1 ? '' : 's'} done</span></div>
+            </div>
+            <div class="row">
+              <a class="btn" href="../daily/">Daily archive</a>
+              <a class="btn gold" href="../">All games</a>
+            </div>
+          </div>`);
+        confetti();
+        return;
+      }
       openModal(`
         <div class="win-panel">
           <h2>Victory</h2>
           <p class="sub">${game.winText}</p>
           <div class="win-stats">
-            <div><b>${G.state.moves}</b><span>Moves</span></div>
-            <div><b>${fmtTime(G.meta.elapsed || clock.acc)}</b><span>Time</span></div>
+            ${moves}
+            ${time}
             <div><b>${G.stats.wins}</b><span>Total wins</span></div>
             <div><b>${G.stats.best ? fmtTime(G.stats.best) : '—'}</b><span>Best time</span></div>
           </div>
@@ -634,7 +667,7 @@ window.Solitaire = (() => {
       openModal(`
         <button class="close-x" data-action="close" aria-label="Close">✕</button>
         <h2>Settings</h2>
-        ${game.dealOptions ? dealSetting() : ''}
+        ${game.dealOptions && !daily ? dealSetting() : ''}
         ${game.settingsHTML()}
         <div class="row"><button class="btn gold" data-action="close">Done</button></div>`);
     }
@@ -684,6 +717,16 @@ window.Solitaire = (() => {
 
     function newGame(force = false) {
       const inProgress = !G.meta.won && G.state.moves > 0;
+      if (!force && inProgress && daily) {
+        openModal(`
+          <h2>Restart this deal?</h2>
+          <p class="sub">The same cards are dealt again from the start.</p>
+          <div class="row">
+            <button class="btn" data-action="close">Keep playing</button>
+            <button class="btn gold" data-action="new-force">Restart</button>
+          </div>`);
+        return;
+      }
       if (!force && inProgress) {
         openModal(`
           <h2>New game?</h2>
@@ -708,7 +751,7 @@ window.Solitaire = (() => {
       winTimers = [];
       stopAutoPlay();
       clearHint();
-      G.state = game.freshState();
+      G.state = freshState();
       G.history = [];
       G.meta = { counted: false, won: false, elapsed: 0 };
       clock.acc = 0;
@@ -781,12 +824,26 @@ window.Solitaire = (() => {
 
     // ---------- Start ----------
 
+    // Show that this is a daily deal, and that "New" can only start the same deal over.
+    function labelDaily() {
+      const when = Daily.format(daily.date, { month: 'short', day: 'numeric' });
+      document.title = `Daily Deal, ${when} · ${daily.name}`;
+      document.body.classList.add('daily-deal');
+      hud.querySelector('.tagline').textContent = `Daily Deal · ${when}`;
+      const restart = $('#btn-new');
+      restart.title = 'Restart this deal (N)';
+      restart.querySelector('span').textContent = 'Restart';
+    }
+
     function start() {
       G.stats = Object.assign({ wins: 0, played: 0, best: null }, load(KEYS.stats, {}));
       const storedSettings = load(KEYS.settings, {});
       G.settings = Object.assign({}, game.settingsDefaults, storedSettings);
+      // A daily deal brings its own variation, so the player's choice stays unmade if it was.
+      if (daily && game.dealOptions && !(game.dealOptions.key in storedSettings)) delete G.settings[game.dealOptions.key];
       build();
       layout();
+      if (daily) labelDaily();
       wire();
       const saved = load(KEYS.game, null);
       let ok = false;
@@ -801,14 +858,15 @@ window.Solitaire = (() => {
         updateHud();
         autoPlay();
       } else {
-        G.state = game.freshState();
+        G.state = freshState();
         G.meta = { counted: false, won: false, elapsed: 0 };
         const welcome = () => { if (!G.stats.played) setTimeout(showRules, 1600); };
-        if (game.dealOptions && !(game.dealOptions.key in storedSettings)) askDealOption(welcome);
+        if (game.dealOptions && !daily && !(game.dealOptions.key in storedSettings)) askDealOption(welcome);
         else {
           deal();
           welcome();
         }
+        if (daily && Daily.isDone(daily.date)) toast("You've already completed this deal. Playing it again won't change your total.");
       }
       setInterval(() => { $('#time').textContent = fmtTime(elapsed()); }, 1000);
     }
