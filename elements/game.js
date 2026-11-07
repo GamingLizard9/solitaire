@@ -64,12 +64,12 @@
   const isFaceOf = (id, suit) => card(id).face && card(id).suit === suit;
 
   // Can `lower` be placed directly onto `upper` in a column? Numbers go down one rank onto a
-  // different suit; face cards go on face cards of their own suit; the star stacks with nothing.
+  // different suit. Face cards and the star stack with nothing: they only go into an empty
+  // column or a free cell.
   function fits(lower, upper) {
     const a = card(lower);
     const b = card(upper);
-    if (a.star || b.star) return false;
-    if (a.face || b.face) return a.face && b.face && a.suit === b.suit;
+    if (a.star || b.star || a.face || b.face) return false;
     return b.rank === a.rank + 1 && b.suit !== a.suit;
   }
 
@@ -84,7 +84,7 @@
   // ---------- Collapsing face cards ----------
 
   // The face cards of a suit that are exposed: in a free cell, or the last card of a column.
-  // A face covered by anything, even another face of its suit, doesn't count.
+  // A face with anything on it doesn't count.
   function looseFaces(suit, s = G.state) {
     const out = [];
     s.cells.forEach((p, i) => { if (s.sealed[i] < 0 && p.length && isFaceOf(p[0], suit)) out.push(p[0]); });
@@ -307,7 +307,7 @@
         else if (from.pos === 0) score = 60;
         else if (belowHome) score = 65;
         else if (alreadyRun) continue; // shuffling a run between equal parents gains nothing
-        else score = 45 + (card(base).face ? 5 : 0);
+        else score = 45;
         out.push({ ...src, to: { type: 'tableau', idx: c }, score });
       }
 
@@ -500,14 +500,14 @@
     <h3>Moving cards</h3>
     <ul>
       <li>Number cards stack in descending rank on a card of a different suit, so a Fire or Earth 4 can go on a Water 5.</li>
-      <li>Face cards only stack on face cards of the same suit.</li>
+      <li>Face cards don't stack on anything, and nothing stacks on them. They can only go into an empty column or a free cell.</li>
       <li>Any ordered run can be moved together, whatever its length, and any card or run may go into an empty column.</li>
       <li>The three free cells each hold any one card.</li>
       <li>Scoring piles build up from 1 to 9 in a single suit. Scored cards stay there.</li>
     </ul>
     <h3>Collapsing faces</h3>
     <ul>
-      <li>When all four face cards of a suit are exposed (each one in a free cell or at the very end of a column, with nothing on it, not even another face), that suit's button glows.</li>
+      <li>When all four face cards of a suit are exposed (each one in a free cell or at the very end of a column), that suit's button glows.</li>
       <li>Press it to turn them into a face-down pile in a free cell, either one that already holds one of those faces or an empty one. That cell stays taken for the rest of the game.</li>
     </ul>
     <h3>Controls</h3>
