@@ -68,6 +68,11 @@ window.Solitaire = (() => {
   const STEP_MIN = 90;
   const STEP_MAX = 230;
   const STEP_TOTAL = 2400;
+  // A long chain of automatic moves speeds up as it goes, so the end of a game doesn't drag:
+  // each step's pause is PACE_DECAY times the last one's, down to PACE_MIN of the full pause.
+  const PACE_DECAY = 0.9;
+  const PACE_MIN = 0.3;
+  const paced = (ms, n) => Math.round(ms * Math.max(PACE_MIN, PACE_DECAY ** n));
 
   // ---------- The game runner ----------
 
@@ -131,6 +136,7 @@ window.Solitaire = (() => {
     let autoTimer = null;
     let cueTimer = null;
     let cued = [];       // elements lit up for the coming automatic step
+    let autoRun = 0;     // automatic steps made since the player last moved
     let mustChoose = false;  // the first-visit deal picker is up and can't be dismissed
     let onChosen = null;
     const clock = { acc: 0, since: null };
@@ -213,6 +219,7 @@ window.Solitaire = (() => {
     function committed(isUndo = false, auto = false, autoWait = autoStep) {
       hintIndex = 0;
       clearHint();
+      if (!auto) autoRun = 0;
       if (!isUndo && !auto) {
         if (!G.meta.counted) {
           G.meta.counted = true;
@@ -241,7 +248,8 @@ window.Solitaire = (() => {
     // function may carry { ids, to, cue }: then those cards glow with their destination for `cue`
     // ms before they go, and hop on the way there, so the player can see what's moving on its
     // own. A card that's turning over starts glowing once the flip looks nearly done; it lifts
-    // when the flip ends (table.css), and never leaves before then.
+    // when the flip ends (table.css), and never leaves before then. The pause and the glow
+    // shorten as a chain of automatic steps goes on (see PACE_DECAY); a flip still runs its course.
     function autoPlay(wait = autoStep) {
       if (!game.nextAuto || G.busy || G.meta.won || autoTimer) return;
       const next = game.nextAuto();
@@ -251,7 +259,9 @@ window.Solitaire = (() => {
         const flipping = next.ids.some(id => G.els[id].classList.contains('flip3d'));
         const lead = flipping ? Math.min(next.flipLead ?? FLIP_LOOKS_DONE, FLIP_MS) : 0;
         cueTimer = setTimeout(() => { cueTimer = null; showCue(next); }, lead);
-        wait = Math.max(lead + next.cue, flipping ? FLIP_MS : 0);
+        wait = Math.max(lead + paced(next.cue, autoRun), flipping ? FLIP_MS : 0);
+      } else {
+        wait = paced(wait, autoRun);
       }
       autoTimer = setTimeout(() => {
         autoTimer = null;
@@ -260,6 +270,7 @@ window.Solitaire = (() => {
         const step = !G.meta.won && game.nextAuto();
         if (!step) return;
         step();
+        autoRun++;
         committed(false, true); // chains into the next step, if any
         if (step.cue) step.ids.forEach(id => hop(G.els[id]));
       }, wait);
@@ -806,6 +817,7 @@ window.Solitaire = (() => {
       winTimers.forEach(clearTimeout);
       winTimers = [];
       stopAutoPlay();
+      autoRun = 0;
       clearHint();
       G.state = freshState();
       G.history = [];
@@ -938,5 +950,5 @@ window.Solitaire = (() => {
     return G;
   }
 
-  return { SUITS, TEXT_STYLE, suitSVG, last, same, place, shuffle, fmtTime, createGame };
+  return { SUITS, TEXT_STYLE, suitSVG, last, same, place, shuffle, fmtTime, paced, createGame };
 })();

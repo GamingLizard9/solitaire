@@ -224,6 +224,7 @@
     G.busy = true;
     $('#btn-auto').classList.add('hidden');
     let idle = 0;
+    let done = 0;
     const step = () => {
       const m = nextFinishStep(G.state, idle);
       if (!m) {
@@ -241,7 +242,7 @@
         idle = 0;
         G.move(m.from, m.ids, m.to);
       }
-      if (!G.meta.won) setTimeout(step, 115); // on a win the celebration takes over
+      if (!G.meta.won) setTimeout(step, Solitaire.paced(115, done++)); // speeds up as it goes; on a win the celebration takes over
     };
     step();
   }
