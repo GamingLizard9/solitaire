@@ -293,6 +293,22 @@ a.quartet:hover, a.quartet:focus-visible { border-color: #d98b5f; background: rg
   border-color: #d98b5f;
 }
 
+/* Elements' card keeps its own slate and gold look */
+.elements { border-color: rgba(226, 191, 92, 0.4); }
+a.elements:hover, a.elements:focus-visible { border-color: #e2bf5c; background: rgba(226, 191, 92, 0.08); }
+.elements .preview {
+  border-bottom-color: rgba(226, 191, 92, 0.22);
+  background: radial-gradient(ellipse at 50% 30%, rgba(58, 63, 71, 0.95), rgba(31, 35, 40, 0.95));
+}
+.elements .info h2 { color: #f6e3a6; }
+.elements .play { background: linear-gradient(135deg, #f5dc8c, #b98c2c); color: #1d1604; }
+.elements .mini i svg { display: block; width: 28px; height: 28px; fill: currentColor; }
+.mini.fire { color: #B33A32; }
+.mini.water { color: #164B82; }
+.mini.star { color: #f2c230; }
+.mini.star i { inset: 0; display: grid; place-items: center; }
+.mini.star i svg { width: 40px; height: 40px; filter: drop-shadow(0 0 0.8px #8a6400); }
+
 /* Klondike's card keeps its own oxblood and silver look */
 .klondike { border-color: rgba(195, 201, 212, 0.4); }
 a.klondike:hover, a.klondike:focus-visible { border-color: #c3c9d4; background: rgba(195, 201, 212, 0.08); }

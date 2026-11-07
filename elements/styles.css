@@ -1,0 +1,218 @@
+/* Elements: slate felt and starlight gold. The shared table styles live in ../shared/table.css. */
+
+:root {
+  --felt-1: #3a3f47;
+  --felt-2: #1f2328;
+  --felt-3: #0c0e11;
+  --accent: #e2bf5c;
+  --accent-light: #f6e3a6;
+  --accent-rgb: 226, 191, 92;
+  --accent-line: rgba(176, 140, 50, 0.5);
+  --btn-1: #f5dc8c;
+  --btn-2: #b98c2c;
+  --btn-1-hover: #fbe8a8;
+  --btn-2-hover: #c99c38;
+  --btn-ink: #1d1604;
+  --btn-glow-rgb: 245, 220, 140;
+  --face-1: #fffefa;
+  --face-2: #f4f2ea;
+  --face-3: #e0dccf;
+  --ink: #1d2126;
+  --fire: #B33A32;
+  --water: #164B82;
+  --earth: #28734A;
+  --star: #f2c230;
+  --mint: #8fe8d0;
+  --mint-rgb: 143, 232, 208;
+  --mint-light: #ddfff4;
+  --hint-rgb: 255, 214, 120;
+  --hint-light: #fff1c8;
+  --text: #eeeae0;
+  --locked-shade: rgba(12, 14, 18, 0.45);
+  --toast-bg: rgba(22, 25, 30, 0.94);
+  --modal-bg: rgba(6, 7, 9, 0.62);
+  --panel-1: #343941;
+  --panel-2: #1a1d22;
+  --panel-rim: rgba(20, 22, 26, 0.9);
+  --back: #262b33;
+  --confetti: #f2c230 #B33A32 #164B82 #28734A #fffefa;
+}
+
+/* ---------- Suit colours ---------- */
+
+.card.fire { color: var(--fire); }
+.card.water { color: var(--water); }
+.card.earth { color: var(--earth); }
+.card.star { color: var(--star); }
+.card.star .suit-svg { filter: drop-shadow(0 0 0.6px #8a6400) drop-shadow(0 0 0.6px #8a6400); }
+
+/* ---------- Top row ---------- */
+
+.slot.cell {
+  border: 1.5px solid rgba(var(--accent-rgb), 0.3);
+  background: rgba(var(--accent-rgb), 0.05);
+}
+.slot.cell .cell-label {
+  font: 600 calc(var(--cw) * 0.11)/1.35 'Outfit', sans-serif;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  text-align: center;
+  color: rgba(var(--accent-rgb), 0.5);
+}
+
+.slot.found span, .slot.star-pile span { font-size: calc(var(--cw) * 0.46); opacity: 0.4; }
+.slot.found.fire span { color: #e0756c; }
+.slot.found.water span { color: #6a9ad0; }
+.slot.found.earth span { color: #6bbf8e; }
+.slot.star-pile {
+  border: 1.5px solid rgba(var(--accent-rgb), 0.45);
+  background: radial-gradient(circle, rgba(var(--accent-rgb), 0.12), transparent 70%);
+}
+.slot.star-pile span { color: var(--star); opacity: 0.5; }
+
+/* The three collapse buttons share one card-sized spot, stacked. */
+.slot.collapse {
+  border: none;
+  background: transparent;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: calc(var(--ch) * 0.05);
+  padding: calc(var(--ch) * 0.02) calc(var(--cw) * 0.1);
+}
+.collapse-btn {
+  --c: 120, 120, 120;
+  flex: 1;
+  display: grid;
+  place-items: center;
+  padding: 0 calc(var(--cw) * 0.14);
+  border-radius: calc(var(--cw) * 0.12);
+  border: 1.5px solid rgba(var(--c), 0.45);
+  background: rgba(var(--c), 0.1);
+  color: rgba(var(--c), 0.75);
+  font-size: calc(var(--ch) * 0.2);
+  cursor: pointer;
+  opacity: 0.6;
+  transition: opacity 0.3s, background 0.3s, border-color 0.3s, transform 0.15s, box-shadow 0.3s;
+}
+.collapse-btn.fire { --c: 210, 92, 82; }
+.collapse-btn.water { --c: 76, 136, 204; }
+.collapse-btn.earth { --c: 76, 170, 116; }
+.collapse-btn .suit-svg { width: 0.85em; height: 0.85em; }
+.collapse-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.collapse-btn.ready {
+  opacity: 1;
+  color: #fff;
+  border-color: rgb(var(--c));
+  background: rgba(var(--c), 0.85);
+  animation: collapseGlow 1.1s ease-in-out infinite;
+}
+.collapse-btn.ready:hover { transform: scale(1.06); }
+.collapse-btn.ready:active { transform: scale(0.96); }
+.collapse-btn.done { opacity: 0.22; cursor: default; border-style: dashed; }
+.collapse-btn.hint { animation: glowTarget 0.9s ease-in-out infinite; }
+.collapse-btn.nope { animation: nudge 0.38s ease; }
+
+@keyframes collapseGlow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(var(--c), 0.7), 0 0 8px 1px rgba(var(--c), 0.5); }
+  50% { box-shadow: 0 0 0 3px rgba(var(--c), 0.35), 0 0 20px 6px rgba(var(--c), 0.8); }
+}
+@keyframes nudge {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-4px); }
+  75% { transform: translateX(4px); }
+}
+
+/* ---------- Card faces ---------- */
+
+.idx.suit-only { justify-content: flex-start; }
+.idx.suit-only .s { font-size: calc(var(--cw) * 0.22); }
+
+/* Face cards: the element in a framed panel, tinted with its colour. */
+.crest {
+  flex-direction: column;
+  gap: calc(var(--cw) * 0.05);
+  border: 1.5px solid currentColor;
+  border-radius: calc(var(--cw) * 0.05);
+  background:
+    repeating-linear-gradient(45deg, rgba(0, 0, 0, 0.05) 0 1px, transparent 1px 6px),
+    linear-gradient(#fffdf6, #efe9dc);
+  box-shadow: inset 0 0 0 2px rgba(255, 253, 246, 0.9), inset 0 0 0 3px var(--accent-line);
+}
+.crest span { font-size: calc(var(--cw) * 0.4); line-height: 1; }
+.crest b {
+  font: 600 calc(var(--cw) * 0.09)/1 'Outfit', sans-serif;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+}
+
+/* The star: a single gold star in a soft burst. */
+.star-burst::before {
+  content: '';
+  position: absolute;
+  width: 110%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background:
+    repeating-conic-gradient(from 0deg, rgba(242, 194, 48, 0.22) 0 6deg, transparent 6deg 18deg);
+  mask: radial-gradient(circle, #000 30%, transparent 70%);
+  -webkit-mask: radial-gradient(circle, #000 30%, transparent 70%);
+}
+.star-burst span { font-size: calc(var(--cw) * 0.56); line-height: 1; }
+.card.star .face { background: radial-gradient(circle at 50% 50%, #fffbe8 0%, var(--face-2) 70%, var(--face-3) 100%); }
+
+/* ---------- Card back: slate with a gold star medallion ---------- */
+
+.back {
+  background-color: var(--back);
+  background-image:
+    radial-gradient(circle at 50% 50%, transparent 0 30%, rgba(8, 10, 14, 0.55) 80%),
+    repeating-linear-gradient(60deg, rgba(var(--accent-rgb), 0.16) 0 1px, transparent 1px calc(var(--cw) * 0.09)),
+    repeating-linear-gradient(-60deg, rgba(var(--accent-rgb), 0.16) 0 1px, transparent 1px calc(var(--cw) * 0.09));
+  border: 1px solid rgba(0, 0, 0, 0.45);
+  box-shadow:
+    inset 0 0 0 calc(var(--cw) * 0.04) var(--back),
+    inset 0 0 0 calc(var(--cw) * 0.052) var(--accent),
+    inset 0 0 0 calc(var(--cw) * 0.07) var(--back),
+    0 1px 2px rgba(0, 0, 0, 0.35), 0 3px 8px rgba(0, 0, 0, 0.2);
+}
+.back::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: calc(var(--cw) * 0.36);
+  height: calc(var(--cw) * 0.36);
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  border: 2px solid var(--accent);
+  background: radial-gradient(circle, var(--accent) 0 14%, var(--back) 15% 52%, rgba(var(--accent-rgb), 0.6) 53% 58%, var(--back) 59%);
+  box-shadow: 0 0 0 4px var(--back), 0 0 0 5px rgba(var(--accent-rgb), 0.4);
+}
+
+/* The top card of a collapsed pile shows its element in the medallion. */
+.back .seal {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: none;
+  place-items: center;
+  font-size: calc(var(--cw) * 0.2);
+}
+.back .seal.fire { color: #ef8a80; }
+.back .seal.water { color: #7fb0e8; }
+.back .seal.earth { color: #7fd3a2; }
+.card.sealed-top .back .seal { display: grid; }
+.card.sealed-top .back::after { background: var(--back); }
+.card.sealed-top .back {
+  box-shadow:
+    inset 0 0 0 calc(var(--cw) * 0.04) var(--back),
+    inset 0 0 0 calc(var(--cw) * 0.052) var(--accent),
+    inset 0 0 0 calc(var(--cw) * 0.07) var(--back),
+    0 0 0 2px rgba(var(--accent-rgb), 0.5), 0 0 16px 2px rgba(var(--accent-rgb), 0.4);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .collapse-btn.ready, .collapse-btn.hint, .collapse-btn.nope { animation: none; }
+  .collapse-btn.ready { box-shadow: 0 0 0 3px rgba(var(--c), 0.6); }
+}
