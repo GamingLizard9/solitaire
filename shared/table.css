@@ -293,6 +293,16 @@ a.brand:hover { opacity: 0.8; }
 
 .card.shake .inner { animation: shake 0.38s ease; }
 
+/* Safe auto-play: the card about to go home lifts and glows while its foundation lights up,
+   then hops on its way there. */
+.card .inner { transition: transform 0.2s ease-out; }
+.card.auto-cue:not(.flip3d) .inner { transform: translateY(calc(var(--ch) * -0.06)) scale(1.07); }
+.card.auto-cue .face { animation: glowHint 0.85s ease-in-out infinite; }
+.card.auto-target .face,
+.slot.auto-target { animation: glowTarget 0.85s ease-in-out infinite; }
+.card.auto-fly .inner { transition: none; animation: autoHop 0.38s ease-out; }
+.card.auto-fly .face { box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3), 0 20px 34px rgba(0, 0, 0, 0.5); }
+
 @keyframes glowHint {
   0%, 100% { box-shadow: 0 0 0 2px rgb(var(--hint-rgb)), 0 0 12px 2px rgba(var(--hint-rgb), 0.65); }
   50% { box-shadow: 0 0 0 3px var(--hint-light), 0 0 26px 7px rgba(var(--hint-rgb), 0.95); }
@@ -307,6 +317,11 @@ a.brand:hover { opacity: 0.8; }
   40% { transform: translateX(6%); }
   60% { transform: translateX(-4%); }
   80% { transform: translateX(2%); }
+}
+@keyframes autoHop {
+  0% { transform: translateY(calc(var(--ch) * -0.06)) scale(1.07); }
+  45% { transform: translateY(calc(var(--ch) * -0.12)) scale(1.13); }
+  100% { transform: none; }
 }
 @keyframes bump {
   0% { transform: scale(1); }
@@ -529,6 +544,8 @@ a.brand:hover { opacity: 0.8; }
 @media (prefers-reduced-motion: reduce) {
   .card, .card .inner { transition-duration: 0.12s !important; }
   .card.hint .face, .card.hint-target .face, .slot.hint-target, .btn.gold { animation: none; }
+  .card.auto-cue:not(.flip3d) .inner, .card.auto-fly .inner { transform: none; animation: none; }
+  .card.auto-cue .face, .card.auto-target .face, .slot.auto-target { animation: none; box-shadow: 0 0 0 3px rgb(var(--hint-rgb)); }
   .confetti { display: none; }
 }
 

@@ -61,6 +61,8 @@ window.Solitaire = (() => {
   }
 
   const AUTO_STEP = 140; // default ms between automatic steps
+  const FLIP_MS = 500;   // how long a card takes to turn over (see .card.flip3d in table.css)
+  const FLIP_LOOKS_DONE = 200; // a flip has eased most of the way round by now (a step's `flipLead` overrides it)
   // ms between the steps of a move played out card by card: slow enough to follow, but a long
   // run speeds up so the whole move takes about STEP_TOTAL.
   const STEP_MIN = 90;
@@ -125,6 +127,8 @@ window.Solitaire = (() => {
     let dropEl = null;
     let winTimers = [];
     let autoTimer = null;
+    let cueTimer = null;
+    let cued = [];       // elements lit up for the coming automatic step
     let mustChoose = false;  // the first-visit deal picker is up and can't be dismissed
     let onChosen = null;
     const clock = { acc: 0, since: null };
@@ -231,22 +235,57 @@ window.Solitaire = (() => {
 
     // ---------- Automatic steps ----------
 
-    // game.nextAuto() returns a function that makes the next automatic step, or null.
+    // game.nextAuto() returns a function that makes the next automatic step, or null. The
+    // function may carry { ids, to, cue }: then those cards glow with their destination for `cue`
+    // ms before they go, and hop on the way there, so the player can see what's moving on its
+    // own. A card that's turning over starts glowing once the flip looks nearly done; it lifts
+    // when the flip ends (table.css), and never leaves before then.
     function autoPlay(wait = autoStep) {
       if (!game.nextAuto || G.busy || G.meta.won || autoTimer) return;
-      if (!game.nextAuto()) return;
+      const next = game.nextAuto();
+      if (!next) return;
       G.busy = true;
+      if (next.cue) {
+        const flipping = next.ids.some(id => G.els[id].classList.contains('flip3d'));
+        const lead = flipping ? Math.min(next.flipLead ?? FLIP_LOOKS_DONE, FLIP_MS) : 0;
+        cueTimer = setTimeout(() => { cueTimer = null; showCue(next); }, lead);
+        wait = Math.max(lead + next.cue, flipping ? FLIP_MS : 0);
+      }
       autoTimer = setTimeout(() => {
         autoTimer = null;
         G.busy = false;
+        clearCue();
         const step = !G.meta.won && game.nextAuto();
         if (!step) return;
         step();
         committed(false, true); // chains into the next step, if any
+        if (step.cue) step.ids.forEach(id => hop(G.els[id]));
       }, wait);
     }
 
+    function showCue(step) {
+      cued = step.ids.map(id => G.els[id]).concat(game.targetEl(step.to));
+      step.ids.forEach(id => G.els[id].classList.add('auto-cue'));
+      game.targetEl(step.to).classList.add('auto-target');
+    }
+
+    function clearCue() {
+      clearTimeout(cueTimer);
+      cueTimer = null;
+      cued.forEach(el => el.classList.remove('auto-cue', 'auto-target'));
+      cued = [];
+    }
+
+    function hop(el) {
+      el.classList.remove('auto-fly');
+      void el.offsetWidth;
+      el.classList.add('auto-fly');
+      clearTimeout(el._ht);
+      el._ht = setTimeout(() => el.classList.remove('auto-fly'), 600);
+    }
+
     function stopAutoPlay() {
+      clearCue();
       if (!autoTimer) return;
       clearTimeout(autoTimer);
       autoTimer = null;

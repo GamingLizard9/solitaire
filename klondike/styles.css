@@ -173,3 +173,26 @@
   transform: rotate(calc(var(--k) * 15deg));
   transform-origin: 50% 120%;
 }
+
+/* klondike/?demo: the auto-play timing panel */
+.demo-panel {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 5000;
+  width: min(290px, calc(100vw - 32px));
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1px solid var(--accent-line);
+  background: var(--toast-bg);
+  color: var(--text);
+  font: 400 13px/1.4 'Outfit', sans-serif;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
+}
+.demo-panel summary { font-weight: 600; font-size: 14px; cursor: pointer; }
+.demo-panel:not([open]) { width: auto; padding: 10px 14px; }
+.demo-panel ol { margin: 6px 0 10px; padding-left: 18px; }
+.demo-panel label { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; margin-bottom: 8px; }
+.demo-panel output { font-variant-numeric: tabular-nums; color: var(--accent-light); }
+.demo-panel input { grid-column: 1 / -1; width: 100%; accent-color: var(--accent); }
+.demo-panel p { margin: 4px 0 10px; opacity: 0.75; font-size: 12px; }

@@ -13,8 +13,24 @@
 
   const DRAWS = [1, 2, 3];
   const WORDS = ['', 'one', 'two', 'three'];
-  const AUTO_BEAT = 400;        // ms pause after a card turns over, before it's auto-played
-  const AUTO_AFTER_FLIP = 500 + AUTO_BEAT; // the flip itself takes 0.5s
+  // How long a safe card glows before auto-play sends it home, from the deck (waste) or from a
+  // column (tableau). For a card that's turning over, the glow starts `flip` ms into the 0.5s flip.
+  const CUE = { waste: 250, tableau: 450, flip: 250 };
+
+  // klondike/?demo opens a fixed position for watching safe auto-play, with sliders for the cue
+  // times above (see the end of this file). It keeps its own save, stats and settings, so it
+  // never touches a real game, and every load starts the position over.
+  const DEMO = new URLSearchParams(location.search).has('demo');
+  const DEMO_ID = 'klondike-demo';
+  if (DEMO) {
+    const q = new URLSearchParams(location.search);
+    for (const k of ['waste', 'tableau', 'flip']) if (q.has(k) && !isNaN(+q.get(k))) CUE[k] = +q.get(k);
+    try {
+      localStorage.removeItem(`${DEMO_ID}.game.v1`);
+      localStorage.setItem(`${DEMO_ID}.settings.v1`, JSON.stringify({ autoSafe: true, draw: 1 }));
+      localStorage.setItem(`${DEMO_ID}.stats.v1`, JSON.stringify({ wins: 0, played: 1, best: null })); // no welcome rules
+    } catch { /* storage unavailable */ }
+  }
 
   const $ = sel => document.querySelector(sel);
 
@@ -41,6 +57,7 @@
   }
 
   function freshState() {
+    if (DEMO) return demoState();
     const deck = shuffle([...Array(52).keys()]);
     const tableau = Array.from({ length: 7 }, () => []);
     let k = 0;
@@ -133,7 +150,7 @@
     G.snapshot();
     turnStock(state);
     state.moves++;
-    G.committed(false, false, AUTO_AFTER_FLIP);
+    G.committed();
     if (state.stock.length) G.bump(G.slots.badge);
   }
 
@@ -168,7 +185,9 @@
 
   function nextAuto() {
     const m = G.settings.autoSafe && nextFoundationMove(G.state, isSafeHome);
-    return m ? () => put(G.state, m.to, take(G.state, m.from, 1)) : null;
+    if (!m) return null;
+    const step = () => put(G.state, m.to, take(G.state, m.from, 1));
+    return Object.assign(step, { ids: m.ids, to: m.to, cue: m.from.type === 'waste' ? CUE.waste : CUE.tableau, flipLead: CUE.flip });
   }
 
   // ---------- Auto-finish ----------
@@ -513,6 +532,59 @@
     G.updateHud();
   }
 
+  // ---------- Auto-play demo ----------
+
+  // A♠ then 2♠ sit on top of the stock. K♠ covers a face-down A♥ next to an empty column, and
+  // 2♥ waits face up on another column. The other aces are buried, and every other face-up card
+  // is too high to go home.
+  function demoState() {
+    const special = [0, 1, 12, 13, 14, 26, 39]; // A♠ 2♠ K♠ A♥ 2♥ A♣ A♦
+    const high = [];
+    const low = [];
+    for (const c of CARDS) if (!special.includes(c.id)) (c.rank >= 6 ? high : low).push(c.id);
+    const tableau = [
+      [13, 12], [], [26, ...high.splice(0, 2), 14], [39, ...high.splice(0, 4)],
+      high.splice(0, 5), high.splice(0, 6), high.splice(0, 7),
+    ];
+    return {
+      stock: [...low, ...high, 1, 0], waste: [], foundations: [[], [], [], []],
+      tableau, hidden: tableau.map(col => Math.max(0, col.length - 1)), draw: 1, moves: 0,
+    };
+  }
+
+  function demoPanel() {
+    const panel = document.createElement('details');
+    panel.className = 'demo-panel';
+    panel.open = true;
+    const slider = (key, label, max = 2000) => `
+      <label><span>${label}</span><output data-out="${key}"></output>
+        <input type="range" min="0" max="${max}" step="25" value="${CUE[key]}" data-cue="${key}"></label>`;
+    panel.innerHTML = `
+      <summary>Auto-play timing</summary>
+      <ol>
+        <li>Press the deck: A♠ goes home, and 2♠ on the next press.</li>
+        <li>Click K♠: A♥ turns over and goes home, then 2♥ follows from its column.</li>
+      </ol>
+      ${slider('waste', 'From the deck')}
+      ${slider('tableau', 'From the columns')}
+      ${slider('flip', 'Glow starts into a flip', 500)}
+      <p>The first two set how long the card glows before it moves. The last sets how far into a card's 0.5s flip the glow begins. Undo replays a step.</p>
+      <button class="btn" data-demo="reset">Start over</button>`;
+    const show = () => panel.querySelectorAll('output').forEach(o => { o.textContent = CUE[o.dataset.out] + ' ms'; });
+    panel.addEventListener('input', e => {
+      const key = e.target.dataset.cue;
+      if (!key) return;
+      CUE[key] = +e.target.value;
+      show();
+      const q = new URLSearchParams(location.search);
+      q.set(key, CUE[key]);
+      history.replaceState(null, '', '?' + q.toString().replace('demo=', 'demo'));
+    });
+    panel.querySelector('[data-demo="reset"]').addEventListener('click', () => location.reload());
+    show();
+    document.body.appendChild(panel);
+  }
+
   // A little fan of n cards for the deal picker.
   const fanIcon = n =>
     `<span class="deal-fan">${Array.from({ length: n }, (_, k) => `<i style="--k: ${k - (n - 1) / 2}"></i>`).join('')}</span>`;
@@ -520,7 +592,7 @@
   // ---------- Start ----------
 
   G = Solitaire.createGame({
-    id: 'klondike',
+    id: DEMO ? DEMO_ID : 'klondike',
     cards: CARDS,
     cardLabel: c => `${RANKS[c.rank - 1]} of ${SUITS[c.suit].name}`,
     faceHTML,
@@ -545,7 +617,6 @@
     dealOrder,
     dealFrom: () => ({ x: 0, y: G.L.top, key: 's' }),
     nextAuto,
-    afterDealWait: AUTO_BEAT,
     press: (id, loc) => {
       if (loc.type !== 'stock') return false;
       draw();
@@ -566,6 +637,7 @@
         e.preventDefault();
         draw();
       });
+      if (DEMO) demoPanel();
     },
     rulesHTML,
     settingsDefaults: { autoSafe: true, draw: 1 },
