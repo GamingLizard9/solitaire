@@ -90,6 +90,8 @@ window.Solitaire = (() => {
   //   moveSteps(from, ids, to) [{ from, ids, to }]: a move to play out as these smaller moves,
   //                            in order, so the player can see how it's done,
   //   settingsDefaults, settingsHTML(), onSetting(key), maxWidth,
+  //   shading: false           for a game that never shades buried cards, to leave out the
+  //                            shared "Shade buried cards" setting,
   //   dealOptions              { key, title, prompt, choices: [{ value, label, sub, icon? }] }: a
   //                            choice asked once on the first visit, then changed in Settings;
   //                            kept in G.settings[key] and read by freshState() at each deal.
@@ -381,7 +383,7 @@ window.Solitaire = (() => {
         el.style.transform = `translate(${p.x}px, ${p.y}px)`;
         if (instant || el.classList.contains('down') === p.down) el.classList.toggle('down', p.down);
         else flips.push({ el, down: p.down, delay });
-        el.classList.toggle('locked', !!p.locked);
+        el.classList.toggle('locked', !!p.locked && shading());
         const moved = el._key !== p.key || (boost && boost.has(c.id)) || delay;
         if (instant) {
           clearTimeout(el._zt);
@@ -705,14 +707,26 @@ window.Solitaire = (() => {
     }
 
     function showSettings() {
-      if (!game.settingsHTML) return;
+      if (!game.settingsHTML && game.shading === false) return;
       openModal(`
         <button class="close-x" data-action="close" aria-label="Close">✕</button>
         <h2>Settings</h2>
         ${game.dealOptions && !daily ? dealSetting() : ''}
-        ${game.settingsHTML()}
+        ${game.settingsHTML ? game.settingsHTML() : ''}
+        ${game.shading === false ? '' : shadingSetting()}
         <div class="row"><button class="btn gold" data-action="close">Done</button></div>`);
     }
+
+    // Every game that marks buried cards as `locked` gets this setting; one that never does
+    // passes `shading: false` to leave it out.
+    const shading = () => game.shading !== false && G.settings.shadeBuried !== false;
+
+    const shadingSetting = () => `
+      <label class="toggle">
+        <input type="checkbox" data-setting="shadeBuried"${shading() ? ' checked' : ''}>
+        <span class="switch" aria-hidden="true"></span>
+        <span><b>Shade buried cards</b><small>Darkens cards that are covered by ones you can play, so it's easy to see what can move.</small></span>
+      </label>`;
 
     // The buttons for a game's deal options. `action` is what a pick does; `mark` flags the current one.
     function dealPicker(action, mark = true) {
@@ -822,6 +836,10 @@ window.Solitaire = (() => {
       if (!key) return;
       G.settings[key] = e.target.checked;
       saveSettings();
+      if (key === 'shadeBuried') {
+        if (!G.meta.won) render();
+        return;
+      }
       if (game.onSetting) game.onSetting(key);
     });
 
@@ -880,7 +898,7 @@ window.Solitaire = (() => {
     function start() {
       G.stats = Object.assign({ wins: 0, played: 0, best: null }, load(KEYS.stats, {}));
       const storedSettings = load(KEYS.settings, {});
-      G.settings = Object.assign({}, game.settingsDefaults, storedSettings);
+      G.settings = Object.assign({ shadeBuried: true }, game.settingsDefaults, storedSettings);
       // A daily deal brings its own variation, so the player's choice stays unmade if it was.
       if (daily && game.dealOptions && !(game.dealOptions.key in storedSettings)) delete G.settings[game.dealOptions.key];
       build();
