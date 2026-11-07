@@ -13,6 +13,9 @@
 
   const COLS = 8;
   const CELLS = 4;
+  // Play a run's move out card by card through the free cells (see moveSteps). Off for now: a
+  // run moves across in one go.
+  const SHOW_RUN_STEPS = false;
 
   const $ = sel => document.querySelector(sel);
 
@@ -476,7 +479,7 @@
     grab,
     canDrop,
     apply: (s, from, ids, to) => put(s, to, take(s, from, ids.length)),
-    moveSteps,
+    moveSteps: SHOW_RUN_STEPS ? moveSteps : null,
     dropZones,
     targetEl,
     clickTarget,
