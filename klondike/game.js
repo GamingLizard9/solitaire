@@ -559,7 +559,13 @@
     },
     wire: () => {
       $('#btn-auto').addEventListener('click', autoFinish);
-      G.slots.stock.addEventListener('click', () => { if (!G.state.stock.length) draw(); });
+      // A fresh press, not a click: the press that turns the last stock card would otherwise
+      // finish as a click on the now-empty slot and recycle the waste straight away.
+      G.slots.stock.addEventListener('pointerdown', e => {
+        if (e.button > 0 || G.state.stock.length) return;
+        e.preventDefault();
+        draw();
+      });
     },
     rulesHTML,
     settingsDefaults: { autoSafe: true, draw: 1 },
