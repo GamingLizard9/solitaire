@@ -93,6 +93,11 @@ function replay(date, play, table, moves) {
   moves.forEach((m, k) => {
     if (m.draw) {
       game.onKey(' ', { preventDefault() {} });
+    } else if (m.collapse !== undefined) {
+      // Elements: press a suit's collapse button, as its number key does.
+      const before = JSON.stringify(G.state);
+      game.onKey(String(m.collapse + 1), { preventDefault() {} });
+      if (JSON.stringify(G.state) === before) fail(m, k, 'is refused by the rules');
     } else {
       const from = game.locate(m.card);
       const ids = game.grab(from);

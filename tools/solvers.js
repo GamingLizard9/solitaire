@@ -479,9 +479,156 @@ function solveQuartet(deck) {
   return search({ t, free: null, sealed: Array(9).fill(false) }, quartetRules);
 }
 
+// ---------- Elements ----------
+
+// Ids match elements/game.js: 0-26 are the 1 to 9 of Fire, Water and Earth, 27-38 the face
+// cards, 39 the star. A free cell holds null, a card id, or 'S' + suit once a suit has collapsed.
+const E_STAR = 39;
+const eFace = id => id >= 27 && id < E_STAR;
+const eSuit = id => (eFace(id) ? Math.floor((id - 27) / 4) : Math.floor(id / 9));
+const eRank = id => id % 9 + 1;
+const eNumber = id => id < 27;
+const eFits = (lower, upper) => eNumber(lower) && eNumber(upper) && eRank(upper) === eRank(lower) + 1 && eSuit(upper) !== eSuit(lower);
+const eRunStart = col => {
+  let i = col.length - 1;
+  while (i > 0 && eFits(col[i], col[i - 1])) i--;
+  return i;
+};
+const eSealed = cell => typeof cell === 'string';
+const eOpen = cell => cell === null;
+const eCellFace = (cell, suit) => typeof cell === 'number' && eFace(cell) && eSuit(cell) === suit;
+
+// The game's collapse: all four faces exposed (in a cell or ending a column), gathered into the
+// first cell holding one of them, else the first empty cell.
+function eCollapse(s, suit) {
+  if (s.cells.includes('S' + suit)) return null;
+  const inCells = s.cells.filter(c => eCellFace(c, suit)).length;
+  const onCols = s.t.filter(col => col.length && eFace(last(col)) && eSuit(last(col)) === suit).length;
+  if (inCells + onCols !== 4) return null;
+  let target = s.cells.findIndex(c => eCellFace(c, suit));
+  if (target < 0) target = s.cells.findIndex(eOpen);
+  if (target < 0) return null;
+  const cells = s.cells.map(c => (eCellFace(c, suit) ? null : c));
+  cells[target] = 'S' + suit;
+  const t = s.t.map(col => (col.length && eFace(last(col)) && eSuit(last(col)) === suit ? col.slice(0, -1) : col));
+  return { ...s, cells, t };
+}
+
+// Moves that can only help, made as soon as they're possible: the star home, a number nothing
+// could still need, and collapsing a suit (its faces have nowhere else to end up).
+function eForced(s) {
+  const moves = [];
+  for (;;) {
+    let next = null;
+    const exposed = [];
+    s.cells.forEach((c, i) => { if (typeof c === 'number') exposed.push({ id: c, cell: i }); });
+    s.t.forEach((col, c) => { if (col.length) exposed.push({ id: last(col), col: c }); });
+    for (const e of exposed) {
+      const safe = e.id === E_STAR ||
+        (eNumber(e.id) && eRank(e.id) === s.f[eSuit(e.id)] + 1 && s.f.every((n, i) => i === eSuit(e.id) || n >= eRank(e.id) - 1));
+      if (!safe) continue;
+      const cells = e.cell === undefined ? s.cells : replaced(s.cells, e.cell, null);
+      const t = e.col === undefined ? s.t : replaced(s.t, e.col, s.t[e.col].slice(0, -1));
+      const f = e.id === E_STAR ? s.f : replaced(s.f, eSuit(e.id), s.f[eSuit(e.id)] + 1);
+      next = { ...s, cells, t, f, star: s.star || e.id === E_STAR };
+      moves.push({ card: e.id, to: e.id === E_STAR ? { type: 'star', pos: 0 } : { type: 'found', idx: eSuit(e.id) } });
+      break;
+    }
+    if (!next) {
+      for (let suit = 0; suit < 3 && !next; suit++) {
+        next = eCollapse(s, suit);
+        if (next) moves.push({ collapse: suit });
+      }
+    }
+    if (!next) return { state: s, moves };
+    s = next;
+  }
+}
+
+function elementsNext(s) {
+  const out = [];
+  const push = (state, move) => {
+    const forced = eForced(state);
+    out.push({ state: forced.state, moves: [move, ...forced.moves] });
+  };
+  const firstEmpty = s.t.findIndex(col => !col.length);
+  const firstCell = s.cells.findIndex(eOpen);
+
+  // Out of a free cell.
+  s.cells.forEach((id, i) => {
+    if (typeof id !== 'number') return;
+    const cells = replaced(s.cells, i, null);
+    if (eNumber(id) && eRank(id) === s.f[eSuit(id)] + 1) {
+      push({ ...s, cells, f: replaced(s.f, eSuit(id), s.f[eSuit(id)] + 1) }, { card: id, to: { type: 'found', idx: eSuit(id) } });
+    }
+    for (let d = 0; d < 8; d++) {
+      const target = s.t[d];
+      if (target.length ? !eFits(id, last(target)) : d !== firstEmpty) continue;
+      push({ ...s, cells, t: replaced(s.t, d, target.concat(id)) }, { card: id, to: { type: 'tableau', idx: d } });
+    }
+  });
+
+  // Out of a column: any part of its movable run, however long.
+  for (let c = 0; c < 8; c++) {
+    const col = s.t[c];
+    if (!col.length) continue;
+    const top = last(col);
+    if (eNumber(top) && eRank(top) === s.f[eSuit(top)] + 1) {
+      push({ ...s, t: replaced(s.t, c, col.slice(0, -1)), f: replaced(s.f, eSuit(top), s.f[eSuit(top)] + 1) }, { card: top, to: { type: 'found', idx: eSuit(top) } });
+    }
+    for (let i = eRunStart(col); i < col.length; i++) {
+      const rest = col.slice(0, i);
+      for (let d = 0; d < 8; d++) {
+        if (d === c) continue;
+        const target = s.t[d];
+        if (target.length ? !eFits(col[i], last(target)) : d !== firstEmpty || !rest.length) continue;
+        push({ ...s, t: replaced(replaced(s.t, c, rest), d, target.concat(col.slice(i))) }, { card: col[i], to: { type: 'tableau', idx: d } });
+      }
+    }
+    if (firstCell >= 0) {
+      push({ ...s, cells: replaced(s.cells, firstCell, top), t: replaced(s.t, c, col.slice(0, -1)) }, { card: top, to: { type: 'cell', idx: firstCell } });
+    }
+  }
+  return out;
+}
+
+const elementsRules = {
+  next: elementsNext,
+  // Face cards of a suit are interchangeable, and so is which cell holds what.
+  key: s => {
+    const name = id => (typeof id === 'number' && eFace(id) ? 'f' + eSuit(id) : String(id));
+    return s.t.map(col => col.map(name).join(',')).sort().join(';') + '|' + s.cells.map(name).sort().join(',') + '|' + s.f.join(',') + (s.star ? '*' : '');
+  },
+  score: s => {
+    const home = s.f[0] + s.f[1] + s.f[2];
+    let buried = 0;
+    let tangled = 0;
+    for (const col of s.t) {
+      if (!col.length) continue;
+      tangled += eRunStart(col);
+      col.forEach((id, i) => {
+        if (id === E_STAR || (eNumber(id) && eRank(id) === s.f[eSuit(id)] + 1)) buried += col.length - 1 - i;
+      });
+    }
+    const used = s.cells.filter(c => typeof c === 'number').length;
+    const sealed = s.cells.filter(eSealed).length;
+    const empties = s.t.filter(col => !col.length).length;
+    return 4 * (27 - home) + 2 * buried + 2 * tangled + 2 * used - 8 * sealed - 3 * empties + (s.star ? 0 : 3);
+  },
+  won: s => s.star && s.f.every(n => n === 9) && s.cells.every(eSealed),
+  depthCost: 0.02,
+};
+
+function solveElements(deck) {
+  const t = Array.from({ length: 8 }, (_, c) => deck.slice(c * 5, c * 5 + 5));
+  const start = eForced({ t, cells: [null, null, null], f: [0, 0, 0], star: false });
+  const moves = search(start.state, elementsRules);
+  return moves && [...start.moves, ...moves];
+}
+
 // ---------- By game ----------
 
-const SIZES = { klondike: 52, freecell: 52, clearview: 52, quartet: 36 };
+const SIZES = { klondike: 52, freecell: 52, clearview: 52, quartet: 36, elements: 40 };
 
 function solve(play, deck) {
   switch (play.game) {
@@ -489,6 +636,7 @@ function solve(play, deck) {
     case 'freecell': return solveFreecell(deck);
     case 'clearview': return solveClearview(deck);
     case 'quartet': return solveQuartet(deck);
+    case 'elements': return solveElements(deck);
   }
   throw new Error('No solver for ' + play.game);
 }
