@@ -536,6 +536,7 @@ a.brand:hover { opacity: 0.8; }
 
 @media (max-width: 760px) {
   #hud { padding: 8px 10px; justify-content: center; }
+  #table { padding: 0 4px; }
   .tagline { display: none; }
   .daily-deal .tagline { display: block; letter-spacing: 0.2em; }
   .brand h1 { font-size: 22px; }

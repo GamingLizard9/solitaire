@@ -282,7 +282,10 @@ window.Solitaire = (() => {
     function layout() {
       const hudH = hud.getBoundingClientRect().height;
       // Measure the body rather than the window so phone safe-area padding is respected.
-      const availW = Math.min(document.body.clientWidth - 32, game.maxWidth || 1180);
+      // Leave room for the table's side padding, which shrinks on small screens.
+      const ts = getComputedStyle(board.parentElement);
+      const sidePad = parseFloat(ts.paddingLeft) + parseFloat(ts.paddingRight);
+      const availW = Math.min(document.body.clientWidth - sidePad, game.maxWidth || 1180);
       const availH = document.body.clientHeight - hudH - 12;
       game.layout(availW, availH);
       board.style.width = G.L.w + 'px';
