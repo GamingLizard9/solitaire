@@ -317,47 +317,72 @@
 
   const colX = c => c * (G.L.cw + G.L.gap);
 
+  // Where spot k of the top row sits: the four free cells, then the four foundations. With two
+  // rows the cells sit above the foundations.
+  const topPos = k => ({ x: colX(k % G.L.per), y: G.L.top + Math.floor(k / G.L.per) * (G.L.ch + G.L.gap) });
+  const cellPos = i => topPos(i);
+  const foundPos = f => topPos(CELLS + f);
+
+  // Where column c starts, and how far down its cards may fan. With two rows the first four
+  // columns sit on top and the other four beneath them.
+  function colPos(c) {
+    const { per, ch, gap, h, rowY } = G.L;
+    const row = Math.floor(c / per);
+    const end = row + 1 < rowY.length ? rowY[row + 1] - Math.max(gap, 10) : h - 8;
+    return { x: colX(c % per), y: rowY[row], room: end - rowY[row] - ch };
+  }
+
   function layout(availW, availH) {
     const gapR = 0.14;
-    let cw = availW / (COLS + (COLS - 1) * gapR);
-    cw = Math.min(cw, 120, availH / 1.4 / 3.9);
-    cw = Math.floor(Math.max(cw, 34));
+    // The card width for `per` columns across, when the board is `tall` card heights high.
+    const fit = (per, tall) =>
+      Math.floor(Math.max(34, Math.min(availW / (per + (per - 1) * gapR), 120, availH / 1.4 / tall)));
+    let per = COLS;
+    let cw = fit(COLS, 3.9);
+    // Two rows only when they give bigger cards, i.e. on tall, narrow screens.
+    if (G.settings.twoRows && fit(COLS / 2, 7.6) > cw) {
+      per = COLS / 2;
+      cw = fit(per, 7.6);
+    }
     const ch = Math.round(cw * 1.4);
     const gap = Math.round(cw * gapR);
     const top = 6;
-    G.L = { cw, ch, gap, top, w: COLS * cw + (COLS - 1) * gap, h: availH, tabY: top + ch + Math.max(Math.round(gap * 1.6), 14) };
+    const rows = COLS / per;
+    const tabY = top + rows * ch + (rows - 1) * gap + Math.max(Math.round(gap * 1.6), 14);
+    const rowY = Array.from({ length: rows }, (_, r) => Math.round(tabY + r * (availH - tabY) / rows));
+    G.L = { cw, ch, gap, top, per, rowY, tabY, w: per * cw + (per - 1) * gap, h: availH };
 
     const { slots } = G;
-    slots.cells.forEach((el, i) => place(el, colX(i), top));
-    slots.found.forEach((el, f) => place(el, colX(CELLS + f), top));
-    slots.tab.forEach((el, c) => place(el, colX(c), G.L.tabY));
+    slots.cells.forEach((el, i) => place(el, cellPos(i).x, cellPos(i).y));
+    slots.found.forEach((el, f) => place(el, foundPos(f).x, foundPos(f).y));
+    slots.tab.forEach((el, c) => place(el, colPos(c).x, colPos(c).y));
   }
 
   function positions() {
     const state = G.state;
     const out = {};
-    const { ch, top } = G.L;
+    const { ch } = G.L;
 
     state.cells.forEach((id, i) => {
-      if (id !== null) out[id] = { x: colX(i), y: top, z: 100, down: false, key: 'c' + i };
+      if (id !== null) out[id] = { ...cellPos(i), z: 100, down: false, key: 'c' + i };
     });
 
     state.foundations.forEach((f, fi) => {
       f.forEach((id, i) => {
-        out[id] = { x: colX(CELLS + fi), y: top, z: 200 + i, down: false, key: 'f' + fi };
+        out[id] = { ...foundPos(fi), z: 200 + i, down: false, key: 'f' + fi };
       });
     });
 
     // Long columns squeeze their fan to fit the table. Buried cards are shaded, except the next
     // card each foundation needs, so it's easy to spot what to dig out.
-    const room = G.L.h - G.L.tabY - ch - 8;
     state.tableau.forEach((col, c) => {
+      const { x, y, room } = colPos(c);
       let off = ch * 0.27;
       if (col.length > 1) off = Math.max(ch * 0.1, Math.min(off, room / (col.length - 1)));
       let runStart = col.length - 1;
       while (runStart > 0 && fits(col[runStart], col[runStart - 1])) runStart--;
       col.forEach((id, i) => {
-        out[id] = { x: colX(c), y: Math.round(G.L.tabY + i * off), z: 400 + i, down: false, key: 't' + c, locked: i < runStart && !canFound(id, state) };
+        out[id] = { x, y: Math.round(y + i * off), z: 400 + i, down: false, key: 't' + c, locked: i < runStart && !canFound(id, state) };
       });
     });
     return out;
@@ -367,10 +392,10 @@
     const { L, P, state } = G;
     const zones = state.tableau.map((col, c) => ({
       to: { type: 'tableau', idx: c },
-      x: colX(c), y: col.length ? P[last(col)].y : L.tabY, w: L.cw, h: L.ch * 1.5,
+      x: colPos(c).x, y: col.length ? P[last(col)].y : colPos(c).y, w: L.cw, h: L.ch * 1.5,
     }));
-    for (let i = 0; i < CELLS; i++) zones.push({ to: { type: 'cell', idx: i }, x: colX(i), y: L.top, w: L.cw, h: L.ch });
-    for (let f = 0; f < 4; f++) zones.push({ to: { type: 'found', idx: f }, x: colX(CELLS + f), y: L.top, w: L.cw, h: L.ch });
+    for (let i = 0; i < CELLS; i++) zones.push({ to: { type: 'cell', idx: i }, ...cellPos(i), w: L.cw, h: L.ch });
+    for (let f = 0; f < 4; f++) zones.push({ to: { type: 'found', idx: f }, ...foundPos(f), w: L.cw, h: L.ch });
     return zones;
   }
 
@@ -451,9 +476,19 @@
       <input type="checkbox" data-setting="autoSafe"${G.settings.autoSafe ? ' checked' : ''}>
       <span class="switch" aria-hidden="true"></span>
       <span><b>Auto-play safe cards</b><small>Sends a card home automatically once nothing could still need it in the columns. This never turns a winnable game into a lost one.</small></span>
+    </label>
+    <label class="toggle">
+      <input type="checkbox" data-setting="twoRows"${G.settings.twoRows ? ' checked' : ''}>
+      <span class="switch" aria-hidden="true"></span>
+      <span><b>Two-row layout</b><small>On tall, narrow screens like phones, splits the eight columns into two rows of four, with the free cells above the foundations, so the cards can be bigger. Wide screens keep a single row.</small></span>
     </label>`;
 
   function onSetting(key) {
+    if (key === 'twoRows') {
+      G.layout();
+      if (!G.meta.won) G.render();
+      return;
+    }
     if (key !== 'autoSafe') return;
     if (G.settings.autoSafe) G.autoPlay();
     else G.stopAutoPlay();
@@ -491,7 +526,7 @@
     updateHud,
     wire: () => $('#btn-auto').addEventListener('click', autoFinish),
     rulesHTML,
-    settingsDefaults: { autoSafe: true },
+    settingsDefaults: { autoSafe: true, twoRows: false },
     settingsHTML,
     onSetting,
   });

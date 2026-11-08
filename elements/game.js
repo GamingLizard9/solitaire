@@ -352,55 +352,78 @@
   // ---------- Layout & rendering ----------
 
   // Top row: three free cells, the collapse buttons, the star pile, then the three scoring piles.
+  // With two rows the cells and buttons sit above the star and scoring piles.
   const colX = c => c * (G.L.cw + G.L.gap);
   const BTN_COL = 3;
   const STAR_COL = 4;
   const FOUND_COL = 5;
+  const topPos = k => ({ x: colX(k % G.L.per), y: G.L.top + Math.floor(k / G.L.per) * (G.L.ch + G.L.gap) });
+
+  // Where column c starts, and how far down its cards may fan. With two rows the first four
+  // columns sit on top and the other four beneath them.
+  function colPos(c) {
+    const { per, ch, gap, h, rowY } = G.L;
+    const row = Math.floor(c / per);
+    const end = row + 1 < rowY.length ? rowY[row + 1] - Math.max(gap, 10) : h - 8;
+    return { x: colX(c % per), y: rowY[row], room: end - rowY[row] - ch };
+  }
 
   function layout(availW, availH) {
     const gapR = 0.14;
-    let cw = availW / (COLS + (COLS - 1) * gapR);
-    cw = Math.min(cw, 116, availH / 1.4 / 4.1);
-    cw = Math.floor(Math.max(cw, 34));
+    // The card width for `per` columns across, when the board is `tall` card heights high.
+    const fit = (per, tall) =>
+      Math.floor(Math.max(34, Math.min(availW / (per + (per - 1) * gapR), 116, availH / 1.4 / tall)));
+    let per = COLS;
+    let cw = fit(COLS, 4.1);
+    // Two rows only when they give bigger cards, i.e. on tall, narrow screens.
+    if (G.settings.twoRows && fit(COLS / 2, 7.6) > cw) {
+      per = COLS / 2;
+      cw = fit(per, 7.6);
+    }
     const ch = Math.round(cw * 1.4);
     const gap = Math.round(cw * gapR);
     const top = 6;
-    G.L = { cw, ch, gap, top, w: COLS * cw + (COLS - 1) * gap, h: availH, tabY: top + ch + Math.max(Math.round(gap * 1.6), 14) };
+    const rows = COLS / per;
+    const tabY = top + rows * ch + (rows - 1) * gap + Math.max(Math.round(gap * 1.6), 14);
+    const rowY = Array.from({ length: rows }, (_, r) => Math.round(tabY + r * (availH - tabY) / rows));
+    G.L = { cw, ch, gap, top, per, rowY, tabY, w: per * cw + (per - 1) * gap, h: availH };
 
     const { slots } = G;
-    slots.cells.forEach((el, i) => place(el, colX(i), top));
-    place(slots.btns, colX(BTN_COL), top);
-    place(slots.star, colX(STAR_COL), top);
-    slots.found.forEach((el, f) => place(el, colX(FOUND_COL + f), top));
-    slots.tab.forEach((el, c) => place(el, colX(c), G.L.tabY));
+    const at = (el, k) => place(el, topPos(k).x, topPos(k).y);
+    slots.cells.forEach((el, i) => at(el, i));
+    at(slots.btns, BTN_COL);
+    at(slots.star, STAR_COL);
+    slots.found.forEach((el, f) => at(el, FOUND_COL + f));
+    slots.tab.forEach((el, c) => place(el, colPos(c).x, colPos(c).y));
   }
 
   function positions() {
     const s = G.state;
     const out = {};
-    const { ch, top } = G.L;
+    const { ch } = G.L;
 
     s.cells.forEach((p, i) => {
       // A collapsed suit is a squared-up, face-down pile.
       const down = s.sealed[i] >= 0;
+      const { x, y } = topPos(i);
       p.forEach((id, k) => {
-        out[id] = { x: colX(i) - (down ? k : 0), y: top - (down ? k : 0), z: 100 + k, down, key: 'c' + i };
+        out[id] = { x: x - (down ? k : 0), y: y - (down ? k : 0), z: 100 + k, down, key: 'c' + i };
       });
     });
     s.found.forEach((f, fi) => {
-      f.forEach((id, k) => { out[id] = { x: colX(FOUND_COL + fi), y: top, z: 200 + k, down: false, key: 'f' + fi }; });
+      f.forEach((id, k) => { out[id] = { ...topPos(FOUND_COL + fi), z: 200 + k, down: false, key: 'f' + fi }; });
     });
-    s.star.forEach(id => { out[id] = { x: colX(STAR_COL), y: top, z: 200, down: false, key: 'star' }; });
+    s.star.forEach(id => { out[id] = { ...topPos(STAR_COL), z: 200, down: false, key: 'star' }; });
 
     // Long columns squeeze their fan to fit the table. Cards buried under the movable run are shaded.
-    const room = G.L.h - G.L.tabY - ch - 8;
     s.tableau.forEach((col, c) => {
+      const { x, y, room } = colPos(c);
       let off = ch * 0.27;
       if (col.length > 1) off = Math.max(ch * 0.1, Math.min(off, room / (col.length - 1)));
       let runStart = col.length - 1;
       while (runStart > 0 && fits(col[runStart], col[runStart - 1])) runStart--;
       col.forEach((id, i) => {
-        out[id] = { x: colX(c), y: Math.round(G.L.tabY + i * off), z: 400 + i, down: false, key: 't' + c, locked: i < runStart };
+        out[id] = { x, y: Math.round(y + i * off), z: 400 + i, down: false, key: 't' + c, locked: i < runStart };
       });
     });
     return out;
@@ -424,11 +447,11 @@
     const { L, P, state } = G;
     const zones = state.tableau.map((col, c) => ({
       to: { type: 'tableau', idx: c },
-      x: colX(c), y: col.length ? P[last(col)].y : L.tabY, w: L.cw, h: L.ch * 1.5,
+      x: colPos(c).x, y: col.length ? P[last(col)].y : colPos(c).y, w: L.cw, h: L.ch * 1.5,
     }));
-    for (let i = 0; i < CELLS; i++) zones.push({ to: { type: 'cell', idx: i }, x: colX(i), y: L.top, w: L.cw, h: L.ch });
-    zones.push({ to: { type: 'star', pos: 0 }, x: colX(STAR_COL), y: L.top, w: L.cw, h: L.ch });
-    for (let f = 0; f < 3; f++) zones.push({ to: { type: 'found', idx: f }, x: colX(FOUND_COL + f), y: L.top, w: L.cw, h: L.ch });
+    for (let i = 0; i < CELLS; i++) zones.push({ to: { type: 'cell', idx: i }, ...topPos(i), w: L.cw, h: L.ch });
+    zones.push({ to: { type: 'star', pos: 0 }, ...topPos(STAR_COL), w: L.cw, h: L.ch });
+    for (let f = 0; f < 3; f++) zones.push({ to: { type: 'found', idx: f }, ...topPos(FOUND_COL + f), w: L.cw, h: L.ch });
     return zones;
   }
 
@@ -521,9 +544,19 @@
       <input type="checkbox" data-setting="autoSafe"${G.settings.autoSafe ? ' checked' : ''}>
       <span class="switch" aria-hidden="true"></span>
       <span><b>Auto-play safe cards</b><small>Scores a number automatically once nothing could still need to go on it, and sends the star home as soon as it's free. This never turns a winnable game into a lost one.</small></span>
+    </label>
+    <label class="toggle">
+      <input type="checkbox" data-setting="twoRows"${G.settings.twoRows ? ' checked' : ''}>
+      <span class="switch" aria-hidden="true"></span>
+      <span><b>Two-row layout</b><small>On tall, narrow screens like phones, splits the eight columns into two rows of four, with the top piles stacked the same way, so the cards can be bigger. Wide screens keep a single row.</small></span>
     </label>`;
 
   function onSetting(key) {
+    if (key === 'twoRows') {
+      G.layout();
+      if (!G.meta.won) G.render();
+      return;
+    }
     if (key !== 'autoSafe') return;
     if (G.settings.autoSafe) G.autoPlay();
     else G.stopAutoPlay();
@@ -565,7 +598,7 @@
     wire,
     onKey,
     rulesHTML,
-    settingsDefaults: { autoSafe: true },
+    settingsDefaults: { autoSafe: true, twoRows: false },
     settingsHTML,
     onSetting,
   });
