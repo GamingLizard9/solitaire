@@ -227,7 +227,7 @@ a.game:hover, a.game:focus-visible {
 
 .preview {
   position: relative;
-  height: 150px;
+  height: 172px;
   border-bottom: 1px solid rgba(212, 175, 95, 0.18);
   background: radial-gradient(ellipse at 50% 30%, rgba(23, 82, 74, 0.9), rgba(11, 46, 42, 0.9));
 }
@@ -269,6 +269,84 @@ a.game:hover .mini:nth-child(3) { transform: translateX(5%) rotate(16deg); }
   border: 2px solid var(--gold);
 }
 
+/* ---------- Miniature tabletops (built by home-previews.js) ---------- */
+
+.preview { overflow: hidden; }
+
+.scene {
+  position: absolute;
+  top: 16px;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  /* The table carries on past the bottom edge */
+  -webkit-mask-image: linear-gradient(#000 calc(100% - 34px), transparent calc(100% - 4px));
+  mask-image: linear-gradient(#000 calc(100% - 34px), transparent calc(100% - 4px));
+}
+
+.mc {
+  position: absolute;
+  width: var(--w);
+  height: var(--h);
+  border-radius: 0.4em;
+  background: linear-gradient(180deg, #fffdf6, #f1ead8);
+  color: var(--ink);
+  box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.35), 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+.mc b {
+  position: absolute;
+  top: 0.2em;
+  left: 0.3em;
+  display: flex;
+  align-items: center;
+  gap: 0.05em;
+  font: 700 1.1em/1 'Outfit', sans-serif;
+  letter-spacing: -0.04em;
+}
+.mc b i { font-style: normal; font-size: 0.85em; }
+.mc .big {
+  position: absolute;
+  inset: 1.2em 0 0;
+  display: grid;
+  place-items: center;
+  font-style: normal;
+  font-size: 1.7em;
+  line-height: 1;
+}
+.mc svg { display: block; width: 0.85em; height: 0.85em; fill: currentColor; }
+.mc .big svg { width: 0.9em; height: 0.9em; }
+.mc.red { color: var(--red); }
+.mc.fire { color: #B33A32; }
+.mc.water { color: #164B82; }
+.mc.earth { color: #28734A; }
+
+.mc.back {
+  background:
+    repeating-linear-gradient(45deg, rgba(212, 175, 95, 0.4) 0 1px, transparent 1px 4px),
+    repeating-linear-gradient(-45deg, rgba(212, 175, 95, 0.4) 0 1px, transparent 1px 4px),
+    var(--felt-2);
+  box-shadow: inset 0 0 0 1px var(--gold), 0 1px 2px rgba(0, 0, 0, 0.45);
+}
+
+.mc.slot {
+  background: rgba(0, 0, 0, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22);
+}
+
+/* A face card shown as its suit's crest; a sealed pile is a few of them squared up */
+.mc.crest .big { inset: 0.5em 0.4em; border: 1px solid currentColor; border-radius: 2px; opacity: 0.85; }
+.mc.sealed {
+  box-shadow:
+    0 0 0 0.5px rgba(0, 0, 0, 0.35),
+    1.5px 1.5px 0 #e9e1cc, 1.5px 1.5px 0 0.5px rgba(0, 0, 0, 0.3),
+    3px 3px 0 #e1d8c0, 3px 3px 0 0.5px rgba(0, 0, 0, 0.3),
+    0 0 10px 2px var(--seal-glow, rgba(240, 210, 130, 0.55));
+}
+
+.mc.star { color: #f2c230; }
+.mc.star .big { inset: 0; }
+.mc.star .big svg { width: 1.25em; height: 1.25em; filter: drop-shadow(0 0 0.6px #8a6400); }
+
 /* Quartet's card keeps its own midnight-blue and copper look */
 .quartet { border-color: rgba(217, 139, 95, 0.4); }
 a.quartet:hover, a.quartet:focus-visible { border-color: #d98b5f; background: rgba(217, 139, 95, 0.08); }
@@ -278,20 +356,13 @@ a.quartet:hover, a.quartet:focus-visible { border-color: #d98b5f; background: rg
 }
 .quartet .info h2 { color: #f2c4a4; }
 .quartet .play { background: linear-gradient(135deg, #f3bf98, #b8653c); color: #1c0e06; }
-.mini.crest i {
-  inset: 18px 12px;
-  display: grid;
-  place-items: center;
-  border: 1.5px solid #d98b5f;
-  border-radius: 4px;
-  font-size: 26px;
-}
-.quartet .mini.back {
+.quartet .mc.back {
   background:
     repeating-conic-gradient(from 0deg at 50% 50%, rgba(217, 139, 95, 0.3) 0 5deg, transparent 5deg 12deg),
     #15274b;
-  border-color: #d98b5f;
+  box-shadow: inset 0 0 0 1px #d98b5f, 0 1px 2px rgba(0, 0, 0, 0.45);
 }
+.quartet .preview { --seal-glow: rgba(217, 139, 95, 0.75); }
 
 /* Elements' card keeps its own slate and gold look */
 .elements { border-color: rgba(226, 191, 92, 0.4); }
@@ -302,12 +373,6 @@ a.elements:hover, a.elements:focus-visible { border-color: #e2bf5c; background: 
 }
 .elements .info h2 { color: #f6e3a6; }
 .elements .play { background: linear-gradient(135deg, #f5dc8c, #b98c2c); color: #1d1604; }
-.elements .mini i svg { display: block; width: 28px; height: 28px; fill: currentColor; }
-.mini.fire { color: #B33A32; }
-.mini.water { color: #164B82; }
-.mini.star { color: #f2c230; }
-.mini.star i { inset: 0; display: grid; place-items: center; }
-.mini.star i svg { width: 40px; height: 40px; filter: drop-shadow(0 0 0.8px #8a6400); }
 
 /* Klondike's card keeps its own oxblood and silver look */
 .klondike { border-color: rgba(195, 201, 212, 0.4); }
@@ -318,12 +383,12 @@ a.klondike:hover, a.klondike:focus-visible { border-color: #c3c9d4; background: 
 }
 .klondike .info h2 { color: #eef1f6; }
 .klondike .play { background: linear-gradient(135deg, #f1f3f8, #9aa2b2); color: #1e0a10; }
-.klondike .mini.back {
+.klondike .mc.back {
   background:
-    radial-gradient(circle 6px at 50% 100%, transparent 0 70%, rgba(195, 201, 212, 0.45) 70% 90%, transparent 90%) 0 0 / 10px 10px,
-    radial-gradient(circle 6px at 50% 100%, transparent 0 70%, rgba(195, 201, 212, 0.45) 70% 90%, transparent 90%) 5px 5px / 10px 10px,
+    radial-gradient(circle 4px at 50% 100%, transparent 0 65%, rgba(195, 201, 212, 0.5) 65% 95%, transparent 95%) 0 0 / 6px 6px,
+    radial-gradient(circle 4px at 50% 100%, transparent 0 65%, rgba(195, 201, 212, 0.5) 65% 95%, transparent 95%) 3px 3px / 6px 6px,
     #861a2c;
-  border-color: #c3c9d4;
+  box-shadow: inset 0 0 0 1px #c3c9d4, 0 1px 2px rgba(0, 0, 0, 0.45);
 }
 
 /* FreeCell's card keeps its own aubergine and pearl look */
@@ -335,12 +400,12 @@ a.freecell:hover, a.freecell:focus-visible { border-color: #cdb8e8; background: 
 }
 .freecell .info h2 { color: #ede3fb; }
 .freecell .play { background: linear-gradient(135deg, #ece0fc, #9a7cc4); color: #1a0e24; }
-.freecell .mini.back {
+.freecell .mc.back {
   background:
-    repeating-linear-gradient(45deg, rgba(205, 184, 232, 0.35) 0 1px, transparent 1px 7px),
-    repeating-linear-gradient(-45deg, rgba(205, 184, 232, 0.35) 0 1px, transparent 1px 7px),
+    repeating-linear-gradient(45deg, rgba(205, 184, 232, 0.4) 0 1px, transparent 1px 4px),
+    repeating-linear-gradient(-45deg, rgba(205, 184, 232, 0.4) 0 1px, transparent 1px 4px),
     #3e1d55;
-  border-color: #cdb8e8;
+  box-shadow: inset 0 0 0 1px #cdb8e8, 0 1px 2px rgba(0, 0, 0, 0.45);
 }
 
 .info { display: flex; flex-direction: column; flex: 1; padding: 18px 20px 20px; }
