@@ -20,6 +20,9 @@ globalThis.Daily = (() => {
     { game: 'clearview', name: 'Clearview' },
     { game: 'quartet', name: 'Quartet' },
     { game: 'elements', name: 'Elements' },
+    { game: 'spider', name: 'Spider', variant: '1 Suit', value: 1 },
+    { game: 'spider', name: 'Spider', variant: '2 Suits', value: 2 },
+    { game: 'spider', name: 'Spider', variant: '4 Suits', value: 4 },
   ];
 
   // ---------- Randomness that comes out the same everywhere ----------

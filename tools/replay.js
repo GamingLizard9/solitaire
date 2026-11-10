@@ -89,7 +89,8 @@ function replay(date, play, table, moves) {
   const fail = (m, k, why) => { throw new Error(`${date}: move ${k + 1} of ${moves.length} (${JSON.stringify(m)}) ${why}`); };
 
   settle();
-  if (play.value && G.state.draw !== play.value) throw new Error(`${date}: dealt draw ${G.state.draw}, expected ${play.value}`);
+  const option = game.dealOptions && game.dealOptions.key;
+  if (play.value && G.state[option] !== play.value) throw new Error(`${date}: dealt ${option} ${G.state[option]}, expected ${play.value}`);
   moves.forEach((m, k) => {
     if (m.draw) {
       game.onKey(' ', { preventDefault() {} });

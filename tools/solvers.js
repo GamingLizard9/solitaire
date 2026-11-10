@@ -626,9 +626,113 @@ function solveElements(deck) {
   return moves && [...start.moves, ...moves];
 }
 
+// ---------- Spider ----------
+
+// Ids match spider/game.js: 104 cards in eight sets of Ace to King, set n wearing suit n % suits.
+// Like Klondike's, this solver sees the face-down cards.
+const S_COLS = 10;
+const sRank = id => id % 13 + 1;
+
+function spiderRules(suits) {
+  const sSuit = id => Math.floor(id / 13) % suits;
+  const fitsOn = (lower, upper) => sRank(upper) === sRank(lower) + 1;
+  const suited = (lower, upper) => fitsOn(lower, upper) && sSuit(upper) === sSuit(lower);
+  const runFrom = (col, h) => {
+    let i = col.length - 1;
+    while (i > h && suited(col[i], col[i - 1])) i--;
+    return i;
+  };
+
+  // Lift a column's cards from `i` on, turning over whatever they uncover.
+  const lift = (s, c, i) => {
+    const rest = s.t[c].slice(0, i);
+    return { t: replaced(s.t, c, rest), h: replaced(s.h, c, Math.min(s.h[c], Math.max(0, rest.length - 1))) };
+  };
+
+  // A full King-to-Ace run leaves the table as soon as it's assembled, as nextAuto does in play.
+  function clearRuns(s) {
+    for (;;) {
+      const c = s.t.findIndex((col, k) => {
+        const start = col.length - 13;
+        return start >= s.h[k] && sRank(col[start]) === 13 && runFrom(col, start) === start;
+      });
+      if (c < 0) return s;
+      s = { ...s, ...lift(s, c, s.t[c].length - 13), done: s.done + 1 };
+    }
+  }
+
+  function next(s) {
+    const out = [];
+    const firstEmpty = s.t.findIndex(col => !col.length);
+    for (let c = 0; c < S_COLS; c++) {
+      const col = s.t[c];
+      if (!col.length) continue;
+      const start = runFrom(col, s.h[c]);
+      for (let i = start; i < col.length; i++) {
+        const base = col[i];
+        const reveals = i === s.h[c]; // uncovers a card or empties the column
+        // Moving the whole run off a card it doesn't follow can go anywhere it fits. Otherwise
+        // (breaking a run, or leaving a card it follows) it only pays onto its own suit, and only
+        // if that makes a longer run than the one it leaves.
+        const loose = i === start && (reveals || !fitsOn(base, col[i - 1]));
+        const lifted = lift(s, c, i);
+        const moving = col.slice(i);
+        for (let d = 0; d < S_COLS; d++) {
+          if (d === c) continue;
+          const target = s.t[d];
+          if (target.length) {
+            if (!fitsOn(base, last(target))) continue;
+            if (!loose && (sSuit(last(target)) !== sSuit(base) ||
+              target.length - runFrom(target, s.h[d]) + moving.length <= col.length - start)) continue;
+          } else if (d !== firstEmpty || i !== start || i === 0) continue;
+          const t = replaced(lifted.t, d, target.concat(moving));
+          out.push({ state: clearRuns({ ...s, t, h: lifted.h }), moves: [{ card: base, to: { type: 'tableau', idx: d } }] });
+        }
+      }
+    }
+    // The deal needs every column filled, unless too few cards are left to manage it.
+    const onTable = s.t.reduce((n, col) => n + col.length, 0);
+    if (s.stock.length && (firstEmpty < 0 || onTable < S_COLS)) {
+      const row = s.stock.slice(-S_COLS).reverse();
+      const t = s.t.map((col, c) => col.concat(row[c]));
+      out.push({ state: clearRuns({ ...s, t, stock: s.stock.slice(0, -S_COLS) }), moves: [{ draw: true }] });
+    }
+    return out;
+  }
+
+  return {
+    next,
+    // Once the stock is gone the columns' order no longer matters.
+    key: s => {
+      const cols = s.t.map((col, c) => s.h[c] + ':' + col.join(','));
+      return (s.stock.length ? cols : cols.sort()).join(';') + '|' + s.stock.length;
+    },
+    score: s => {
+      let hidden = 0;
+      let breaks = 0;
+      s.t.forEach((col, c) => {
+        hidden += s.h[c];
+        for (let i = s.h[c] + 1; i < col.length; i++) {
+          if (!suited(col[i], col[i - 1])) breaks += fitsOn(col[i], col[i - 1]) ? 1 : 3;
+        }
+      });
+      const empties = s.t.filter(col => !col.length).length;
+      return 6 * hidden + 3 * breaks + 4 * s.stock.length - 40 * s.done - 3 * empties;
+    },
+    won: s => s.done === 8,
+    depthCost: 0.02,
+  };
+}
+
+function solveSpider(deck, suits) {
+  const t = Array.from({ length: S_COLS }, () => []);
+  for (let k = 0; k < 54; k++) t[k % S_COLS].push(deck[k]);
+  return search({ t, h: t.map(col => col.length - 1), stock: deck.slice(54), done: 0 }, spiderRules(suits));
+}
+
 // ---------- By game ----------
 
-const SIZES = { klondike: 52, freecell: 52, clearview: 52, quartet: 36, elements: 40 };
+const SIZES = { klondike: 52, freecell: 52, clearview: 52, quartet: 36, elements: 40, spider: 104 };
 
 function solve(play, deck) {
   switch (play.game) {
@@ -637,6 +741,7 @@ function solve(play, deck) {
     case 'clearview': return solveClearview(deck);
     case 'quartet': return solveQuartet(deck);
     case 'elements': return solveElements(deck);
+    case 'spider': return solveSpider(deck, play.value);
   }
   throw new Error('No solver for ' + play.game);
 }

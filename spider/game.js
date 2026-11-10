@@ -80,7 +80,8 @@
     const tableau = Array.from({ length: COLS }, () => []);
     let k = 0;
     while (k < 54) tableau[k % COLS].push(deck[k++]);
-    const suits = SUIT_COUNTS.includes(G.settings.suits) ? G.settings.suits : 1;
+    const chosen = G.daily ? G.daily.value : G.settings.suits;
+    const suits = SUIT_COUNTS.includes(chosen) ? chosen : 1;
     return {
       stock: deck.slice(k), tableau, hidden: tableau.map(col => col.length - 1),
       foundations: [], suits, moves: 0,
