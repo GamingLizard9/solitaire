@@ -1,0 +1,133 @@
+/* Spider: deep-sea teal felt and frost. The shared table styles live in ../shared/table.css. */
+
+:root {
+  --felt-1: #14586a;
+  --felt-2: #0a3040;
+  --felt-3: #04141c;
+  --accent: #a9dcea;
+  --accent-light: #e2f6fb;
+  --accent-rgb: 169, 220, 234;
+  --accent-line: rgba(92, 150, 168, 0.55);
+  --btn-1: #e4f7fc;
+  --btn-2: #6fb3c6;
+  --btn-1-hover: #f4fdff;
+  --btn-2-hover: #82c2d4;
+  --btn-ink: #06202a;
+  --btn-glow-rgb: 214, 242, 250;
+  --face-1: #fdfefe;
+  --face-2: #f1f5f5;
+  --face-3: #dbe4e6;
+  --red: #c22f45;
+  --ink: #16242c;
+  --mint: #9cf0b4;
+  --mint-rgb: 156, 240, 180;
+  --mint-light: #e2ffe9;
+  --hint-rgb: 255, 214, 140;
+  --hint-light: #fff1cf;
+  --text: #e8f4f7;
+  --locked-shade: rgba(6, 28, 38, 0.42);
+  --toast-bg: rgba(8, 36, 48, 0.94);
+  --modal-bg: rgba(2, 12, 18, 0.62);
+  --panel-1: #124858;
+  --panel-2: #072430;
+  --panel-rim: rgba(7, 36, 48, 0.9);
+  --back: #0f4556;
+  --back-deep: #062530;
+  --confetti: #e2f6fb #a9dcea #c22f45 #fdfefe #9cf0b4;
+}
+
+/* ---------- Top row: stock, completed runs ---------- */
+
+.slot.found span {
+  font: 400 calc(var(--cw) * 0.36)/1 'Poiret One', serif;
+  opacity: 0.55;
+}
+
+/* ---------- Card faces: aces and courts ---------- */
+
+/* Aces sit at the heart of a little web, echoing the back. */
+.ace::before {
+  content: '';
+  position: absolute;
+  width: 86%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  border: 1.5px solid var(--accent-line);
+  background:
+    repeating-conic-gradient(rgba(92, 150, 168, 0.5) 0 2deg, transparent 2deg 45deg),
+    repeating-radial-gradient(circle, transparent 0 22%, rgba(92, 150, 168, 0.4) 22% 25%);
+}
+.ace::after {
+  content: '';
+  position: absolute;
+  width: 52%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--face-1) 55%, transparent 72%);
+}
+.ace span { z-index: 1; font-size: calc(var(--cw) * 0.5); line-height: 1; }
+
+.court {
+  flex-direction: column;
+  gap: calc(var(--cw) * 0.07); /* clears the descending tails of J and Q */
+  border: 1.5px solid var(--accent-line);
+  border-radius: calc(var(--cw) * 0.05);
+  background:
+    repeating-linear-gradient(45deg, rgba(var(--accent-rgb), 0.3) 0 1px, transparent 1px calc(var(--cw) * 0.08)),
+    repeating-linear-gradient(-45deg, rgba(var(--accent-rgb), 0.3) 0 1px, transparent 1px calc(var(--cw) * 0.08)),
+    linear-gradient(#fdfefe, #e3ecee);
+  box-shadow: inset 0 0 0 2px rgba(253, 254, 254, 0.9), inset 0 0 0 3px var(--accent-line);
+}
+.court .cl {
+  font: 800 calc(var(--cw) * 0.32)/1 'Playfair Display', Georgia, serif;
+  text-shadow: 0 0 6px #fdfefe, 0 0 2px #fdfefe;
+}
+.court .cs { font-size: calc(var(--cw) * 0.17); filter: drop-shadow(0 0 3px #fdfefe); }
+
+/* ---------- Card back: a frosted web ---------- */
+
+.back {
+  background-color: var(--back);
+  background-image:
+    radial-gradient(ellipse at 50% 50%, transparent 0 35%, rgba(2, 16, 22, 0.6) 90%),
+    repeating-conic-gradient(from 0deg at 50% 50%, rgba(var(--accent-rgb), 0.5) 0 1deg, transparent 1deg 22.5deg),
+    repeating-radial-gradient(ellipse at 50% 50%, transparent 0 calc(var(--cw) * 0.1), rgba(var(--accent-rgb), 0.34) calc(var(--cw) * 0.1) calc(var(--cw) * 0.115));
+  border: 1px solid rgba(0, 0, 0, 0.45);
+  box-shadow:
+    inset 0 0 0 calc(var(--cw) * 0.04) var(--back-deep),
+    inset 0 0 0 calc(var(--cw) * 0.052) var(--accent),
+    inset 0 0 0 calc(var(--cw) * 0.07) var(--back-deep),
+    0 1px 2px rgba(0, 0, 0, 0.35), 0 3px 8px rgba(0, 0, 0, 0.2);
+}
+.back::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: calc(var(--cw) * 0.2);
+  height: calc(var(--cw) * 0.2);
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  border: 1.5px solid var(--accent);
+  background: radial-gradient(circle, var(--accent-light) 0 22%, var(--back-deep) 26%);
+  box-shadow: 0 0 0 3px var(--back-deep);
+}
+
+/* ---------- Deal picker: the suits in play ---------- */
+
+.deal-suits {
+  display: grid;
+  grid-template-columns: repeat(2, auto);
+  place-content: center;
+  gap: 3px;
+  height: 46px;
+  margin-bottom: 4px;
+  padding: 0 9px;
+  border-radius: 6px;
+  background: linear-gradient(var(--face-1), var(--face-3));
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.35);
+  font-size: 22px;
+}
+.deal-suits i { display: block; color: var(--ink); }
+.deal-suits i.red { color: var(--red); }
+.deal-suits i:only-child { font-size: 32px; }
