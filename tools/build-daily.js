@@ -1,22 +1,27 @@
 // Extends shared/daily-table.js, the list of Daily Deals. Run it with Node from the repo:
 //
-//   node tools/build-daily.js [days]
+//   node tools/build-daily.js [days] [--from YYYY-MM-DD]
 //
-// This fills the table up to that many days past today (60 if not given).
+// This fills the table up to that many days past today (60 if not given). With --from it first
+// drops the listed days from that date on, so they're checked again under the current rules. The
+// date has to be after today, since earlier deals may already have been played.
 //
 // For each new date it takes the shuffle for try 0, 1, 2... until a solver wins one, then plays that
 // win through the real game code (tools/replay.js) before listing the deal. So a listed deal
-// is known to be winnable using only legal moves. In Klondike the solver can see the face-down
-// cards, which a player can't, so a win exists even if finding it takes some luck.
+// is known to be winnable using only legal moves. Klondike, Clearview and Spider hide cards, and
+// the solver can see them, so for those games a try also has to be won by blindSolve, which only
+// uses what a player could see. That win is the one replayed, so these deals can be won without
+// luck or peeking.
 //
-// Days already in the table are never touched, because people may have played them. That also
-// means the solvers can be changed freely. The table is two characters per day, starting at
-// Daily.FIRST_DAY; run this again before it runs out, as later days get unchecked deals.
+// Days already in the table are left alone unless --from asks for them, because people may have
+// played them. That also means the solvers can be changed freely. The table is two characters per
+// day, starting at Daily.FIRST_DAY; run this again before it runs out, as later days get unchecked
+// deals.
 'use strict';
 
 const fs = require('fs');
 const path = require('path');
-const { solve, SIZES } = require('./solvers');
+const { solve, blindSolve, BLIND, SIZES } = require('./solvers');
 const { replay } = require('./replay');
 require('../shared/daily');
 
@@ -37,8 +42,12 @@ function findDeal(date, playIndex, table) {
   const play = Daily.PLAYS[playIndex];
   for (let attempt = 0; attempt < MAX_TRIES; attempt++) {
     const deck = Daily.shuffle([...Array(SIZES[play.game]).keys()], Daily.random(date, playIndex, attempt));
-    const moves = solve(play, deck);
+    let moves = solve(play, deck);
     if (!moves) continue;
+    if (BLIND[play.game]) {
+      moves = blindSolve(play, deck, Daily.random(date, playIndex, attempt + '|blind'));
+      if (!moves) continue;
+    }
     const entry = playIndex.toString(36) + attempt.toString(36);
     replay(date, play, table + entry, moves);
     return { entry, attempt, moves: moves.length };
@@ -46,10 +55,17 @@ function findDeal(date, playIndex, table) {
   throw new Error(`${date}: no winnable ${Daily.label(play)} deal in ${MAX_TRIES} tries`);
 }
 
-const days = Number(process.argv[2]) || 60;
+const args = process.argv.slice(2);
+const fromAt = args.indexOf('--from');
+const from = fromAt >= 0 ? args.splice(fromAt, 2)[1] : null;
+const days = Number(args[0]) || 60;
 const start = Daily.dayNumber(Daily.FIRST_DAY);
 const end = Daily.dayNumber(Daily.today()) + days;
 let table = readTable();
+if (from) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || from <= Daily.today()) throw new Error(`--from has to be a date after today (${Daily.today()})`);
+  table = table.slice(0, Math.max(0, (Daily.dayNumber(from) - start) * 2));
+}
 const began = Date.now();
 const stats = {};
 
