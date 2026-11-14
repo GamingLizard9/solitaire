@@ -11,8 +11,7 @@ globalThis.Daily = (() => {
   const MAX_SAVES = 6; // unfinished daily games kept; each can hold a long undo history
 
   // Each way a deal can be played. The table refers to these by position, so only ever add to the
-  // end: reordering would change deals people have already played. A play marked `retired` is
-  // no longer picked for new days, but deals already listed with it still work.
+  // end: reordering would change deals people have already played.
   const PLAYS = [
     { game: 'klondike', name: 'Klondike', variant: 'Draw 1', value: 1 },
     { game: 'klondike', name: 'Klondike', variant: 'Draw 2', value: 2 },
@@ -23,9 +22,7 @@ globalThis.Daily = (() => {
     { game: 'elements', name: 'Elements' },
     { game: 'spider', name: 'Spider', variant: '1 Suit', value: 1 },
     { game: 'spider', name: 'Spider', variant: '2 Suits', value: 2 },
-    // Retired: tools/build-daily.js needs a win that doesn't peek at face-down cards, and no
-    // 4-suit deal it has tried could be won that way.
-    { game: 'spider', name: 'Spider', variant: '4 Suits', value: 4, retired: true },
+    { game: 'spider', name: 'Spider', variant: '4 Suits', value: 4 },
   ];
 
   // ---------- Randomness that comes out the same everywhere ----------
@@ -87,10 +84,9 @@ globalThis.Daily = (() => {
   // A random game first, then a random variation of it, so a game's odds don't depend on how many
   // variations it has.
   function pick(date) {
-    const current = PLAYS.filter(p => !p.retired);
-    const games = [...new Set(current.map(p => p.game))];
+    const games = [...new Set(PLAYS.map(p => p.game))];
     const game = games[hash(date + '|game') % games.length];
-    const plays = current.filter(p => p.game === game);
+    const plays = PLAYS.filter(p => p.game === game);
     return PLAYS.indexOf(plays[hash(date + '|variant') % plays.length]);
   }
 

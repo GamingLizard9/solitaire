@@ -49,7 +49,7 @@ class Heap {
 
 // `rules` supplies next(state) -> [{ state, moves }], key(state), score(state) (lower is closer to
 // winning) and won(state). A longer line costs a little, so the search doesn't wander forever.
-function search(start, rules, budget = BUDGET, grouped = false) {
+function search(start, rules, budget = BUDGET) {
   const heap = new Heap();
   const seen = new Set([rules.key(start)]);
   let order = 0;
@@ -59,8 +59,7 @@ function search(start, rules, budget = BUDGET, grouped = false) {
     if (rules.won(node.state)) {
       const lines = [];
       for (let n = node; n; n = n.parent) lines.push(n.moves);
-      lines.reverse();
-      return grouped ? lines.filter(step => step.length) : lines.flat();
+      return lines.reverse().flat();
     }
     for (const { state, moves } of rules.next(node.state)) {
       const key = rules.key(state);
@@ -731,127 +730,6 @@ function solveSpider(deck, suits) {
   return search({ t, h: t.map(col => col.length - 1), stock: deck.slice(54), done: 0 }, spiderRules(suits));
 }
 
-// ---------- Playing without seeing the hidden cards ----------
-
-// Klondike, Clearview and Spider hide cards: face-down cards in the columns and the deck's order.
-// The solvers above see them, so a deal they win might only be won by luck. blindSolve plays the
-// deal the way a careful player could. Before each step it makes up `samples` deals that agree
-// with everything the player has seen, solves each one with full sight, and takes the first step
-// that most of those wins begin with. If none of them can be won it gives up. A step is one move,
-// except in Klondike, where it can be "draw until this card comes up, then play it". That's played
-// one draw at a time, and if the card doesn't come up it thinks again from wherever it got to.
-// So a deal it wins was won using only what was face up at each moment. The other games show
-// every card, so solve() already plays them fairly.
-
-const BLIND = {
-  klondike: (deck, play) => {
-    const { t, stock } = dealTriangle(deck);
-    return {
-      start: { t, h: t.map(col => col.length - 1), stock, waste: [], f: [0, 0, 0, 0], draw: play.value },
-      rules: klondikeRules,
-      // klondikeNext bundles draws with the card they reach, so a lone draw is built here.
-      draw: s => {
-        if (s.stock.length) {
-          const n = Math.min(s.draw, s.stock.length);
-          return { ...s, stock: s.stock.slice(0, -n), waste: s.waste.concat(s.stock.slice(-n).reverse()) };
-        }
-        return s.waste.length ? { ...s, stock: s.waste.slice().reverse(), waste: [] } : null;
-      },
-    };
-  },
-  clearview: deck => {
-    const { t, stock } = dealTriangle(deck);
-    return { start: { t, stock, waste: [], free: null, f: [0, 0, 0, 0] }, rules: clearviewRules };
-  },
-  spider: (deck, play) => {
-    const t = Array.from({ length: S_COLS }, () => []);
-    for (let k = 0; k < 54; k++) t[k % S_COLS].push(deck[k]);
-    return { start: { t, h: t.map(col => col.length - 1), stock: deck.slice(54), done: 0 }, rules: spiderRules(play.value) };
-  },
-};
-
-// Every card face up right now. Cards that have gone home were seen on the way.
-function faceUp(s) {
-  const out = [];
-  s.t.forEach((col, c) => out.push(...col.slice(s.h ? s.h[c] : 0)));
-  if (s.waste) out.push(...s.waste);
-  if (s.free !== undefined && s.free !== null) out.push(s.free);
-  return out;
-}
-
-// The same position with the cards the player hasn't seen dealt into the hidden spots at random.
-function guess(s, seen, random) {
-  const spots = [];
-  s.t.forEach((col, c) => {
-    for (let i = 0; i < (s.h ? s.h[c] : 0); i++) spots.push(['t', c, i]);
-  });
-  s.stock.forEach((id, i) => { if (!seen.has(id)) spots.push(['s', i]); });
-  const cards = spots.map(([where, a, b]) => (where === 't' ? s.t[a][b] : s.stock[a]));
-  for (let i = cards.length - 1; i > 0; i--) {
-    const j = Math.floor(random() * (i + 1));
-    [cards[i], cards[j]] = [cards[j], cards[i]];
-  }
-  const t = s.t.map(col => col.slice());
-  const stock = s.stock.slice();
-  spots.forEach(([where, a, b], k) => { if (where === 't') t[a][b] = cards[k]; else stock[a] = cards[k]; });
-  return { ...s, t, stock };
-}
-
-const moveKey = m => (m.draw ? 'draw' : `${m.card}>${m.to.type}${m.to.idx === undefined ? '' : m.to.idx}`);
-
-function blindSolve(play, deck, random, { samples = 12, budget = 40000, maxMoves = 600 } = {}) {
-  const { start, rules, draw } = BLIND[play.game](deck, play);
-  let s = start;
-  const seen = new Set(faceUp(s));
-  const been = new Set([rules.key(s)]);
-  const moves = [];
-  let draws = 0; // in a row, without a card moving
-
-  // One move in the real deal, or null if the rules (or the no-going-back rule) refuse it.
-  // A card move can't return to a position already played. Drawing in Klondike does that every
-  // time the deck comes round again, so draws are limited to as many trips through the deck as
-  // klondikeNext makes instead.
-  function play1(m) {
-    let next;
-    if (m.draw && draw) {
-      if (draws >= 2 * (Math.ceil((s.stock.length + s.waste.length) / s.draw) + 1)) return null;
-      next = draw(s);
-    } else {
-      const e = rules.next(s).find(e => e.moves.length === 1 && moveKey(e.moves[0]) === moveKey(m));
-      next = e && !been.has(rules.key(e.state)) ? e.state : null;
-    }
-    if (!next) return null;
-    s = next;
-    moves.push(m);
-    draws = m.draw ? draws + 1 : 0;
-    been.add(rules.key(s));
-    for (const id of faceUp(s)) seen.add(id);
-    return s;
-  }
-
-  while (!rules.won(s)) {
-    if (moves.length >= maxMoves) return null;
-    const votes = new Map();
-    for (let k = 0; k < samples; k++) {
-      const line = search(guess(s, seen, random), rules, budget, true);
-      if (!line || !line.length) continue;
-      const key = line[0].map(moveKey).join(' ');
-      const v = votes.get(key) || { step: line[0], n: 0 };
-      v.n++;
-      votes.set(key, v);
-    }
-    const ranked = [...votes.values()].sort((a, b) => b.n - a.n);
-    // The favourite step, or the next one if the real deal won't allow its first move.
-    const at = moves.length;
-    for (const { step } of ranked) {
-      for (const m of step) if (!play1(m)) break;
-      if (moves.length > at) break;
-    }
-    if (moves.length === at) return null;
-  }
-  return moves;
-}
-
 // ---------- By game ----------
 
 const SIZES = { klondike: 52, freecell: 52, clearview: 52, quartet: 36, elements: 40, spider: 104 };
@@ -868,4 +746,4 @@ function solve(play, deck) {
   throw new Error('No solver for ' + play.game);
 }
 
-module.exports = { solve, blindSolve, BLIND, SIZES };
+module.exports = { solve, SIZES };
