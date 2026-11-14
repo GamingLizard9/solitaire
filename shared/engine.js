@@ -644,6 +644,13 @@ window.Solitaire = (() => {
       }, 450));
     }
 
+    // A way out to the games menu from the win screen, for when you don't want another deal.
+    const gamesButton = (tone = '') => `
+      <a class="btn${tone ? ' ' + tone : ''}" href="../">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+        All games
+      </a>`;
+
     function showWinModal() {
       const moves = `<div><b>${G.state.moves}</b><span>Moves</span></div>`;
       const time = `<div><b>${fmtTime(G.meta.elapsed || clock.acc)}</b><span>Time</span></div>`;
@@ -660,7 +667,7 @@ window.Solitaire = (() => {
             </div>
             <div class="row">
               <a class="btn" href="../daily/">Daily archive</a>
-              <a class="btn gold" href="../">All games</a>
+              ${gamesButton('gold')}
             </div>
           </div>`);
         confetti();
@@ -677,8 +684,8 @@ window.Solitaire = (() => {
             <div><b>${G.stats.best ? fmtTime(G.stats.best) : '—'}</b><span>Best time</span></div>
           </div>
           ${game.dealOptions
-            ? `<h3>Deal again</h3>${dealPicker()}`
-            : '<div class="row"><button class="btn gold" data-action="new-force">Deal again</button></div>'}
+            ? `<h3>Deal again</h3>${dealPicker()}<div class="row">${gamesButton()}</div>`
+            : `<div class="row">${gamesButton()}<button class="btn gold" data-action="new-force">Deal again</button></div>`}
         </div>`);
       confetti();
     }
