@@ -113,3 +113,185 @@
   background: radial-gradient(circle, var(--accent-light) 0 14%, var(--back-deep) 15% 50%, rgba(var(--accent-rgb), 0.7) 51% 57%, var(--back-deep) 58%);
   box-shadow: 0 0 0 4px var(--back-deep), 0 0 0 5px rgba(var(--accent-rgb), 0.4);
 }
+
+/* ---------- Hint guide ---------- */
+
+/* The step-by-step hint: a strip laid over the header beside the buttons (game.js places it),
+   so it never hides a card. It counts the moves off as they're played. */
+.guide {
+  position: fixed;
+  z-index: 8999;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-height: 46px;
+  padding: 6px 8px 8px 11px;
+  overflow: hidden;
+  border-radius: 14px;
+  border: 1px solid rgba(var(--accent-rgb), 0.5);
+  background: var(--toast-bg);
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.5), inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+  line-height: 1.3;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateY(-10px) scale(0.97);
+  transition: opacity 0.25s, transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1), visibility 0s 0.35s, border-color 0.3s, box-shadow 0.3s;
+}
+.guide.show {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: none;
+  transition-delay: 0s;
+}
+.guide.nudge { animation: guideNudge 0.45s ease; }
+
+/* What the strip covers steps aside while it's up. */
+#hud .stats, #hud .brand { transition: opacity 0.25s; }
+#hud.guide-on .stats,
+#hud.guide-on.guide-over-brand .brand { opacity: 0; }
+
+.guide-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  color: rgb(var(--hint-rgb));
+  background: rgba(var(--hint-rgb), 0.13);
+  box-shadow: 0 0 14px rgba(var(--hint-rgb), 0.25);
+}
+.guide-icon svg { width: 16px; height: 16px; }
+.guide[data-mode="steps"] .guide-icon svg { animation: bulbGlow 1.8s ease-in-out infinite; }
+.guide[data-mode="rewind"] .guide-icon svg { animation: spinBack 1s cubic-bezier(0.3, 0.7, 0.3, 1); }
+.guide[data-mode="done"] .guide-icon,
+.guide[data-mode="rewound"] .guide-icon {
+  color: var(--btn-ink);
+  background: var(--mint);
+  box-shadow: 0 0 16px rgba(var(--mint-rgb), 0.6);
+  animation: iconPop 0.45s ease;
+}
+.guide[data-mode="done"] .guide-icon svg { stroke-width: 3; }
+
+.guide-spin {
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  border: 2px solid rgba(var(--hint-rgb), 0.3);
+  border-top-color: rgb(var(--hint-rgb));
+  animation: spin 0.8s linear infinite;
+}
+
+.guide-body { flex: 1; min-width: 0; }
+.guide-meta {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.guide-meta b { letter-spacing: 0.04em; }
+.guide-num { display: inline-block; color: var(--accent-light); animation: bump 0.45s ease; }
+.guide-tally { float: right; margin-left: 10px; font-variant-numeric: tabular-nums; letter-spacing: 0.06em; }
+.guide[data-mode="rewind"] .guide-meta,
+.guide[data-mode="checking"] .guide-meta,
+.guide[data-mode="failed"] .guide-meta { color: rgb(var(--hint-rgb)); }
+.guide[data-mode="done"] .guide-meta,
+.guide[data-mode="rewound"] .guide-meta { color: var(--mint); }
+
+.guide-text { margin-top: 2px; font-size: 15px; animation: guideIn 0.35s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.guide b { font-weight: 600; white-space: nowrap; color: #fff; }
+.guide b.red { color: #ff9db3; }
+
+.guide-x {
+  flex: none;
+  align-self: flex-start;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid rgba(var(--accent-rgb), 0.35);
+  background: transparent;
+  color: var(--text);
+  font-size: 11px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.guide-x:hover { background: rgba(var(--accent-rgb), 0.15); }
+
+/* A strip along the foot: how far through the moves, or through going back. */
+.guide-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  gap: 2px;
+  height: 3px;
+  background: rgba(var(--hint-rgb), 0.12);
+}
+.guide-bar i {
+  display: block;
+  width: 0;
+  height: 100%;
+  background: linear-gradient(90deg, rgb(var(--hint-rgb)), var(--hint-light));
+  box-shadow: 0 0 8px rgba(var(--hint-rgb), 0.7);
+  transition: width 0.3s ease;
+}
+.guide[data-mode="rewound"] .guide-bar i { background: var(--mint); box-shadow: 0 0 8px rgba(var(--mint-rgb), 0.7); }
+.guide-bar.steps { background: none; }
+.guide-bar.steps i { flex: 1; width: auto; background: rgba(var(--accent-rgb), 0.18); box-shadow: none; }
+.guide-bar.steps i.past { background: var(--accent); }
+.guide-bar.steps i.now {
+  background: linear-gradient(90deg, rgb(var(--hint-rgb)), var(--hint-light));
+  box-shadow: 0 0 8px rgba(var(--hint-rgb), 0.8);
+  transform-origin: left;
+  animation: segIn 0.4s ease-out;
+}
+
+.guide[data-mode="rewind"],
+.guide[data-mode="checking"],
+.guide[data-mode="failed"] {
+  border-color: rgba(var(--hint-rgb), 0.65);
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.5), 0 0 24px rgba(var(--hint-rgb), 0.22);
+}
+.guide[data-mode="done"],
+.guide[data-mode="rewound"] {
+  border-color: var(--mint);
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.5), 0 0 24px rgba(var(--mint-rgb), 0.35);
+}
+
+/* A card the hint has just pointed at gives a little hop. */
+.card.hint-pop .inner { animation: hintPop 0.5s ease-out; }
+
+@keyframes guideIn {
+  from { opacity: 0; transform: translateX(12px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes guideNudge {
+  0%, 100% { transform: none; }
+  35% { transform: translateY(4px) scale(1.03); }
+}
+@keyframes iconPop {
+  0% { transform: scale(0.4); }
+  60% { transform: scale(1.25); }
+  100% { transform: scale(1); }
+}
+@keyframes bulbGlow {
+  0%, 100% { filter: drop-shadow(0 0 0 rgba(var(--hint-rgb), 0)); }
+  50% { filter: drop-shadow(0 0 5px rgba(var(--hint-rgb), 0.95)); }
+}
+@keyframes segIn { from { transform: scaleX(0); } }
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes spinBack { from { transform: rotate(360deg); } }
+@keyframes hintPop {
+  0%, 100% { transform: none; }
+  40% { transform: translateY(calc(var(--ch) * -0.08)) scale(1.06); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .guide { transform: none; }
+  .guide.nudge, .guide-text, .guide-num, .guide-icon, .guide-icon svg, .guide-bar.steps i.now, .card.hint-pop .inner { animation: none !important; }
+  .guide-spin { animation-duration: 2s; }
+}

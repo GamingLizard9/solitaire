@@ -147,6 +147,8 @@
   // Click / tap: the best legal spot for the card (and its run): home, onto another column,
   // an empty column, then a free cell.
   function clickTarget(from, ids) {
+    const hinted = hintedTarget(ids);
+    if (hinted) return hinted;
     const state = G.state;
     const tries = [];
     if (ids.length === 1) tries.push({ type: 'found', idx: card(ids[0]).suit });
@@ -179,6 +181,9 @@
     const twin = f[(suit + 2) % 4].length;
     return opp >= rank - 1 || (opp >= rank - 2 && twin >= rank - 3);
   }
+
+  // Safe auto-play still has a card to send home, so it's about to move on its own.
+  const autoPending = () => G.settings.autoSafe && !!nextFoundationMove(G.state, isSafeHome);
 
   function nextAuto() {
     const m = G.settings.autoSafe && nextFoundationMove(G.state, isSafeHome);
@@ -234,76 +239,383 @@
 
   // ---------- Hints ----------
 
-  function findHints() {
-    const state = G.state;
-    const out = [];
-    const sources = [];
-    state.cells.forEach((id, i) => {
-      if (id !== null) sources.push({ from: { type: 'cell', idx: i, pos: 0 }, ids: [id] });
-    });
-    state.tableau.forEach((col, c) => {
-      for (let i = 0; i < col.length; i++) {
-        if (isRun(col, i)) sources.push({ from: { type: 'tableau', idx: c, pos: i }, ids: col.slice(i) });
-      }
-    });
+  // A hint is a short line of moves that ends with another card going home, shown one move at a
+  // time. The line comes from solver.js, which looks for a way to win the whole game, so a hint
+  // never leads into a dead end. If the game can't be won any more, the hint first takes the
+  // player back, a move at a time, to the last position that still can be.
+  //
+  // `guide` is the hint on the table, or null. Its phase is 'thinking' (waiting on the solver),
+  // 'rewinding', 'steps' (showing steps[index]), 'done' or 'failed'.
+  let guide = null;
+  let guideTimer = null;
+  let known = null; // { autoSafe, startKey, line }: the last winning line, to pick up again later
+  let worker;       // the solver's Web Worker, or false where the browser can't run one
+  let jobs = 0;
+  let rethought = false; // this hint has already had to start over once
 
-    const firstEmpty = state.tableau.findIndex(col => !col.length);
-    const firstCell = state.cells.indexOf(null);
+  const guideEl = document.createElement('div');
+  guideEl.className = 'guide';
+  guideEl.setAttribute('role', 'status');
+  guideEl.setAttribute('aria-live', 'polite');
+  document.body.appendChild(guideEl);
+  guideEl.addEventListener('click', e => { if (e.target.closest('[data-guide="close"]')) closeGuide(); });
 
-    // Would exposing `id` let it go home, or let another card or run move onto it?
-    const opens = (id, movingFrom) =>
-      canFound(id) || sources.some(o => !same(o.from, movingFrom) && fits(o.ids[0], id));
+  const stateKey = () => FreeCellSolver.key(FreeCellSolver.fromGame(G.state));
+  const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+  const tag = id => `<b class="${card(id).color}">${nameOf(id)}</b>`;
+  const list = ids => {
+    const names = ids.map(tag);
+    return names.length < 2 ? names[0] : `${names.slice(0, -1).join(', ')} and ${last(names)}`;
+  };
+  const svg = paths => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`;
+  const ICON = {
+    spin: '<span class="guide-spin"></span>',
+    bulb: svg('<path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.3h6c0-1 .4-1.8 1-2.3A7 7 0 0 0 12 2z"/>'),
+    back: svg('<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>'),
+    done: svg('<path d="M5 12.5 10 17.5 19 7"/>'),
+    stop: svg('<circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5"/><path d="M12 16.5v.01"/>'),
+  };
 
-    for (const src of sources) {
-      const { from, ids } = src;
-      const base = ids[0];
-      const single = ids.length === 1;
-      const col = from.type === 'tableau' ? state.tableau[from.idx] : null;
-      const below = col && from.pos > 0 ? col[from.pos - 1] : null;
-      const belowHome = below !== null && canFound(below);
-
-      if (single && canFound(base)) {
-        out.push({ ...src, to: { type: 'found', idx: card(base).suit }, score: from.type === 'cell' ? 100 : 95 });
-      }
-
-      for (let c = 0; c < COLS; c++) {
-        const target = state.tableau[c];
-        if (!target.length || (from.type === 'tableau' && from.idx === c)) continue;
-        if (!canDrop(ids, from, { type: 'tableau', idx: c })) continue;
-        let score;
-        if (from.type === 'cell') score = 70;
-        else if (from.pos === 0) score = 60; // empties a column
-        else if (belowHome) score = 65;
-        else if (below !== null && fits(base, below)) continue; // shuffling a run between equal parents gains nothing
-        else score = 45 + Math.min(ids.length, 5);
-        out.push({ ...src, to: { type: 'tableau', idx: c }, score });
-      }
-
-      // Moving a whole column into an empty one gains nothing.
-      const toEmpty = { type: 'tableau', idx: firstEmpty };
-      if (firstEmpty >= 0 && !(from.type === 'tableau' && from.pos === 0) && canDrop(ids, from, toEmpty)) {
-        let score = null;
-        if (from.type === 'cell') score = 30 + (card(base).rank === 13 ? 10 : 0);
-        else if (below === null || !fits(base, below)) score = belowHome ? 40 : 22 + (card(base).rank === 13 ? 10 : 0);
-        if (score !== null) out.push({ ...src, to: toEmpty, score });
-      }
-
-      if (single && firstCell >= 0 && from.type === 'tableau' && below !== null && opens(below, from)) {
-        out.push({ ...src, to: { type: 'cell', idx: firstCell }, score: belowHome ? 35 : 12 });
-      }
+  function hint() {
+    if (guide) {
+      if (guide.phase === 'steps') nudge();
+      return;
     }
-
-    return out.sort((a, b) => b.score - a.score);
+    if (foundCount() === 52) return;
+    guide = { phase: 'thinking' };
+    rethought = false;
+    // Still on the last line found? Then carry on along it rather than think again.
+    const at = resume(stateKey());
+    if (at >= 0) {
+      startSteps(known.line.slice(at));
+      return;
+    }
+    think();
   }
 
-  function describe(h) {
-    const what = nameOf(h.ids[0]) + (h.ids.length > 1 ? ` and the ${h.ids.length - 1} below it` : '');
-    const pile = pileOf(h.to);
+  function think() {
+    guide = { phase: 'thinking' };
+    paint({ mode: 'thinking', icon: ICON.spin, meta: 'Hint', text: 'Finding a way forward…' });
+    ask();
+  }
+
+  function resume(k) {
+    if (!known || known.autoSafe !== G.settings.autoSafe) return -1;
+    if (k === known.startKey) return 0;
+    const i = known.line.findIndex(m => m.key === k);
+    return i >= 0 && i + 1 < known.line.length ? i + 1 : -1;
+  }
+
+  // ----- Asking the solver -----
+
+  function solverWorker() {
+    if (worker === undefined) {
+      try {
+        worker = new Worker('solver.js?v=1'); // keep in step with index.html's version
+        worker.onmessage = e => onPlan(e.data);
+        worker.onerror = e => {
+          e.preventDefault();
+          worker.terminate();
+          worker = false;
+          if (guide && guide.job) solveHere(guide.job);
+        };
+      } catch {
+        worker = false;
+      }
+    }
+    return worker;
+  }
+
+  function ask() {
+    const job = {
+      id: ++jobs,
+      current: G.state,
+      history: G.history.map(h => JSON.parse(h)),
+      autoSafe: G.settings.autoSafe,
+    };
+    guide.job = job;
+    const w = solverWorker();
+    if (w) w.postMessage(job);
+    else solveHere(job);
+  }
+
+  // No worker: think on the page itself, once the "thinking" panel has had a moment to show.
+  function solveHere(job) {
+    clearTimeout(guideTimer);
+    guideTimer = setTimeout(() => {
+      onPlan({ id: job.id, ...FreeCellSolver.plan(job.current, job.history, job.autoSafe) });
+    }, 80);
+  }
+
+  function onPlan(msg) {
+    if (!guide || !guide.job || guide.job.id !== msg.id) return;
+    if (msg.rewinding) {
+      paint({ mode: 'checking', icon: ICON.spin, meta: 'No way to win from here', text: 'Looking back through your moves…' });
+      return;
+    }
+    guide.job = null;
+    if (msg.back === 0) startSteps(msg.line);
+    else if (msg.back > 0) rewind(msg.back, msg.line);
+    else failed();
+  }
+
+  // ----- Going back -----
+
+  // Say what's about to happen, give the player a moment to read it, take the moves back one at
+  // a time so they can watch the cards return, then say where that's left them.
+  function rewind(back, line) {
+    guide.phase = 'rewinding';
+    G.busy = true;
+    paint({
+      mode: 'rewind',
+      icon: ICON.back,
+      meta: 'No way to win from here<span class="guide-tally"></span>',
+      text: `Going back ${plural(back, 'move')} to where you can still win`,
+      close: false,
+      bar: '<div class="guide-bar"><i></i></div>',
+    });
+    let done = 0;
+    const finish = () => {
+      G.busy = false;
+      G.updateHud();
+      paint({
+        mode: 'rewound',
+        icon: ICON.back,
+        meta: `Went back ${plural(back, 'move')}`,
+        text: 'You can still win from here',
+        close: false,
+        bar: '<div class="guide-bar"><i style="width: 100%"></i></div>',
+      });
+      guideTimer = setTimeout(() => startSteps(line), 1600);
+    };
+    const step = () => {
+      G.state = JSON.parse(G.history.pop());
+      G.committed(true);
+      done++;
+      guideEl.querySelector('.guide-bar i').style.width = (100 * done / back) + '%';
+      guideEl.querySelector('.guide-tally').textContent = `${done} / ${back}`;
+      guideTimer = done < back ? setTimeout(step, Solitaire.paced(340, done)) : setTimeout(finish, 600);
+    };
+    guideTimer = setTimeout(step, 1900);
+  }
+
+  function failed() {
+    guide.phase = 'failed';
+    paint({
+      mode: 'failed',
+      icon: ICON.stop,
+      meta: 'No way to win',
+      text: `Not from here, or anywhere earlier in this game. ${G.daily ? 'Restart the deal' : 'Deal a new game'} to try again.`,
+    });
+    guideTimer = setTimeout(closeGuide, 7000);
+  }
+
+  // ----- Showing the steps -----
+
+  // Take `line` up to and including the move that gets the next card home. Count from where the
+  // line starts, which may be a card or two further on than the table if auto-play has yet to run.
+  function startSteps(line) {
+    const end = line.length ? line.findIndex(m => m.home > line[0].home - line[0].sent.length) : -1;
+    if (end < 0) {
+      closeGuide();
+      return;
+    }
+    known = { autoSafe: G.settings.autoSafe, startKey: stateKey(), line };
+    guide = { phase: 'steps', steps: line.slice(0, end + 1), index: 0, sent: line[end].sent, goal: line[end].home, shown: -1 };
+    if (autoPending()) G.autoPlay(); // the first step shows once auto-play has sent its cards home
+    else showStep();
+  }
+
+  // Where a step's card is and where it goes, on the table as it is now.
+  function resolve(step) {
+    const from = locate(step.card);
+    const ids = from && grab(from);
+    if (!ids) return null;
+    const { tableau } = G.state;
+    let to;
+    if (step.to.type === 'found') to = { type: 'found', idx: card(step.card).suit };
+    else if (step.to.type === 'cell') to = { type: 'cell', idx: G.state.cells.indexOf(null) };
+    else if (step.to.onto !== null) to = { type: 'tableau', idx: tableau.findIndex(col => last(col) === step.to.onto) };
+    else to = { type: 'tableau', idx: tableau.findIndex((col, c) => !col.length && !(from.type === 'tableau' && from.idx === c)) };
+    return to.idx >= 0 && canDrop(ids, from, to) ? { from, ids, to } : null;
+  }
+
+  // Did the player just make this step's move? Any free cell or empty column will do.
+  function matches(step, ids, to) {
+    if (ids[0] !== step.card || to.type !== step.to.type) return false;
+    if (to.type !== 'tableau') return true;
+    const col = G.state.tableau[to.idx];
+    return step.to.onto === null ? !col.length : last(col) === step.to.onto;
+  }
+
+  function stepText(step, r) {
+    const n = r.ids.length;
+    const what = tag(step.card) + (n > 1 ? ` and the ${n - 1} below it` : '');
     let where;
-    if (h.to.type === 'found') where = 'to its foundation';
-    else if (h.to.type === 'cell') where = 'into a free cell';
-    else where = pile.length ? `onto ${nameOf(last(pile))}` : 'into the empty column';
+    if (step.to.type === 'found') where = 'to its foundation';
+    else if (step.to.type === 'cell') where = 'into a free cell';
+    else where = step.to.onto === null ? 'into an empty column' : `onto ${tag(step.to.onto)}`;
     return `Move ${what} ${where}`;
+  }
+
+  // Light up the current step. Called after every render, so it follows the cards around; it
+  // waits while auto-play is still sending cards home.
+  function showStep() {
+    if (!guide || guide.phase !== 'steps' || autoPending()) return;
+    const step = guide.steps[guide.index];
+    const r = resolve(step);
+    if (!r) {
+      // The table doesn't match the line, which shouldn't happen. Work it out afresh, once.
+      unlight();
+      known = null;
+      if (rethought) closeGuide();
+      else {
+        rethought = true;
+        think();
+      }
+      return;
+    }
+    const fresh = guide.shown !== guide.index;
+    guide.shown = guide.index;
+    if (fresh) {
+      const segs = guide.steps.map((_, i) => `<i class="${i < guide.index ? 'past' : i === guide.index ? 'now' : ''}"></i>`).join('');
+      paint({
+        mode: 'steps',
+        icon: ICON.bulb,
+        meta: `Move <span class="guide-num">${guide.index + 1}</span> of ${guide.steps.length} · to get ${list(guide.sent)} home`,
+        text: stepText(step, r),
+        bar: `<div class="guide-bar steps" aria-hidden="true">${segs}</div>`,
+      });
+    }
+    light(r, fresh);
+  }
+
+  function light(r, pop) {
+    unlight();
+    const els = r.ids.map(id => G.els[id]);
+    els.forEach(el => {
+      el.classList.add('hint');
+      if (pop) popCard(el);
+    });
+    targetEl(r.to).classList.add('hint-target');
+  }
+
+  function unlight() {
+    G.board.querySelectorAll('.hint, .hint-target').forEach(el => el.classList.remove('hint', 'hint-target'));
+  }
+
+  function popCard(el) {
+    el.classList.remove('hint-pop');
+    void el.offsetWidth;
+    el.classList.add('hint-pop');
+    clearTimeout(el._hp);
+    el._hp = setTimeout(() => el.classList.remove('hint-pop'), 600);
+  }
+
+  function nudge() {
+    guideEl.classList.remove('nudge');
+    void guideEl.offsetWidth;
+    guideEl.classList.add('nudge');
+    G.board.querySelectorAll('.card.hint').forEach(popCard);
+  }
+
+  function finishGuide() {
+    if (guide.goal >= 52) {
+      closeGuide(); // the win takes it from here
+      return;
+    }
+    guide.phase = 'done';
+    unlight();
+    paint({
+      mode: 'done',
+      icon: ICON.done,
+      meta: 'Done · press Hint for the next one',
+      text: `${list(guide.sent)} ${guide.sent.length > 1 ? 'are' : 'is'} home`,
+    });
+    clearTimeout(guideTimer);
+    guideTimer = setTimeout(closeGuide, 2600);
+  }
+
+  // ----- The panel -----
+
+  // The panel lives in the header, over the title and the stats, so it never hides a card or a
+  // button. `meta` is the small line on top, `text` the instruction, `bar` a strip along the foot.
+  function paint({ mode, icon, meta, text, close = true, bar = '' }) {
+    guideEl.dataset.mode = mode;
+    guideEl.innerHTML = `
+      <span class="guide-icon">${icon}</span>
+      <div class="guide-body">
+        <div class="guide-meta">${meta}</div>
+        <div class="guide-text">${text}</div>
+      </div>
+      ${close ? '<button class="guide-x" data-guide="close" aria-label="Close hint" title="Close hint (Esc)">✕</button>' : ''}
+      ${bar}`;
+    dock();
+    if (!guideEl.classList.contains('show')) {
+      guideEl.classList.remove('nudge');
+      void guideEl.offsetWidth;
+      guideEl.classList.add('show');
+    }
+  }
+
+  // Cover the stretch of the header beside the buttons: the stats, and the title too when
+  // that's what it takes to fit (on phones the buttons have a row to themselves).
+  function dock() {
+    const hud = $('#hud');
+    const box = hud.getBoundingClientRect();
+    const [brand, stats, actions] = ['.brand', '.stats', '.actions'].map(sel => hud.querySelector(sel).getBoundingClientRect());
+    const sameRow = (a, b) => a.top < b.bottom - 4 && b.top < a.bottom - 4;
+    let left = box.left + 10;
+    let right = box.right - 10;
+    if (sameRow(stats, actions)) right = Math.min(right, actions.left - 14);
+    const overBrand = !(sameRow(stats, brand) && right - brand.right - 14 >= 300);
+    if (!overBrand) left = brand.right + 14;
+    hud.classList.add('guide-on');
+    hud.classList.toggle('guide-over-brand', overBrand);
+    const width = Math.min(480, right - left);
+    guideEl.style.width = width + 'px';
+    guideEl.style.left = Math.round(left + (right - left - width) / 2) + 'px';
+    guideEl.style.top = Math.max(4, Math.round(stats.top + stats.height / 2 - guideEl.offsetHeight / 2)) + 'px';
+  }
+  window.addEventListener('resize', () => { if (guide) dock(); });
+
+  function closeGuide() {
+    if (!guide) return;
+    if (guide.phase === 'rewinding') {
+      G.busy = false;
+      G.updateHud();
+    }
+    // A worker still thinking about a hint nobody wants is stopped; a fresh one starts next time.
+    if (guide.job && worker) {
+      worker.terminate();
+      worker = undefined;
+    }
+    clearTimeout(guideTimer);
+    guide = null;
+    unlight();
+    guideEl.classList.remove('show');
+    $('#hud').classList.remove('guide-on');
+  }
+
+  // ----- Following along -----
+
+  // The player is making a move: if it's the step the hint asked for, the hint moves on;
+  // anything else puts it away.
+  function moved(from, ids, to) {
+    if (!guide || guide.phase === 'done') return;
+    if (guide.phase === 'steps' && matches(guide.steps[guide.index], ids, to)) {
+      guide.index++;
+      if (guide.index === guide.steps.length) finishGuide();
+      return;
+    }
+    closeGuide();
+  }
+
+  // Tapping the hinted card sends it where the hint says.
+  function hintedTarget(ids) {
+    if (!guide || guide.phase !== 'steps' || guide.steps[guide.index].card !== ids[0]) return null;
+    const r = resolve(guide.steps[guide.index]);
+    return r && r.to;
   }
 
   function targetEl(to) {
@@ -430,9 +742,7 @@
   // ---------- HUD, rules & settings ----------
 
   function updateHud() {
-    // While safe auto-play still has a card to send home, it's about to move on its own.
-    const autoPending = G.settings.autoSafe && !!nextFoundationMove(G.state, isSafeHome);
-    $('#btn-auto').classList.toggle('hidden', G.busy || autoPending || !canAutoFinish());
+    $('#btn-auto').classList.toggle('hidden', G.busy || autoPending() || !canAutoFinish());
   }
 
   function validState(s) {
@@ -469,6 +779,11 @@
     <ul>
       <li>Drag cards to move them, or tap a card to send it to the best legal spot.</li>
       <li><kbd>Z</kbd> undo · <kbd>H</kbd> hint · <kbd>N</kbd> new game · <kbd>R</kbd> rules · <kbd>S</kbd> settings</li>
+    </ul>
+    <h3>Hints</h3>
+    <ul>
+      <li>A hint lays out the moves that get another card home, one at a time, counting them off as you play them. Make a different move, or press <kbd>Esc</kbd>, to put it away.</li>
+      <li>Hints follow a way to win the whole game. If the game can't be won any more, the hint first takes you back to the last point where it still could.</li>
     </ul>`;
 
   const settingsHTML = () => `
@@ -484,6 +799,10 @@
     </label>`;
 
   function onSetting(key) {
+    if (key === 'autoSafe') {
+      closeGuide(); // its line was worked out with the old setting
+      known = null;
+    }
     if (key === 'twoRows') {
       G.layout();
       if (!G.meta.won) G.render();
@@ -518,8 +837,15 @@
     dropZones,
     targetEl,
     clickTarget,
-    findHints,
-    describe,
+    hint,
+    moved,
+    undone: closeGuide,
+    dealt: () => {
+      closeGuide();
+      known = null;
+    },
+    afterRender: showStep,
+    onKey: key => { if (key === 'escape' && guide && guide.phase !== 'rewinding') closeGuide(); },
     dealOrder,
     dealFrom: () => ({ x: Math.round((G.L.w - G.L.cw) / 2), y: G.L.top, key: 'deal' }),
     nextAuto,

@@ -87,11 +87,14 @@ window.Solitaire = (() => {
   //   locate(id), grab(loc), canDrop(ids, from, to), apply(s, from, ids, to)
   //   dropZones()              [{ to, x, y, w, h }] for drag-and-drop
   //   targetEl(to), clickTarget(from, ids)
-  //   findHints(), describe(hint)   hints carry { ids, to } and/or { el }
+  //   findHints(), describe(hint)   hints carry { ids, to } and/or { el }; or instead
+  //   hint()                   run the whole hint itself (the Hint button and H key call it)
   //   dealOrder(), dealFrom()  { x, y, key }
   //   rulesHTML()
   // and optionally: nextAuto() returning a step function, autoStep, afterDealWait,
   //   press(id, loc), afterRender(), updateHud(), onKey(key, e), wire(),
+  //   moved(from, ids, to)     the player is making this move (called before it's played),
+  //   undone(), dealt()        the player took a move back, or a new deal began,
   //   moveSteps(from, ids, to) [{ from, ids, to }]: a move to play out as these smaller moves,
   //                            in order, so the player can see how it's done,
   //   settingsDefaults, settingsHTML(), onSetting(key), maxWidth,
@@ -172,6 +175,7 @@ window.Solitaire = (() => {
     }
 
     function move(from, ids, to) {
+      if (game.moved) game.moved(from, ids, to);
       snapshot();
       const steps = game.moveSteps && game.moveSteps(from, ids, to);
       if (steps && steps.length > 1) {
@@ -211,6 +215,7 @@ window.Solitaire = (() => {
         return;
       }
       G.state = JSON.parse(G.history.pop());
+      if (game.undone) game.undone();
       committed(true);
     }
 
@@ -309,6 +314,10 @@ window.Solitaire = (() => {
 
     function showHint() {
       if (G.busy || G.meta.won) return;
+      if (game.hint) {
+        game.hint();
+        return;
+      }
       clearHint();
       const hints = game.findHints();
       if (!hints.length) {
@@ -813,6 +822,7 @@ window.Solitaire = (() => {
         saveSettings();
       }
       mustChoose = false;
+      if (game.dealt) game.dealt();
       if (modalOpen()) closeModal();
       winTimers.forEach(clearTimeout);
       winTimers = [];
